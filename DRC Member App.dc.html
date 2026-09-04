@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,600;0,700;0,800;0,900;1,800;1,900&display=swap">
+<style>
+  body { margin: 0; background: #0a0a0a; }
+  a { color: #e52240; text-decoration: none; }
+  a:hover { color: #ff4f68; }
+  input, select, button { font-family: Montserrat, sans-serif; }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid #e52240; outline-offset: 2px; }
+  input::placeholder { color: #5a5a5a; }
+  @media (max-width: 860px) {
+    .drc-mobile-switch { display: flex !important; }
+    .drc-col { display: none !important; }
+    .drc-col[data-active="true"] { display: flex !important; }
+    .drc-cols-row { justify-content: center !important; }
+  }
+</style>
+<script src="assets/supabase.js"></script>
+</helmet>
+
+<div style="min-height:100vh;background:#0a0a0a;color:#fff;font-family:Montserrat,sans-serif;padding:48px 56px 72px">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:24px">
+      <img src="assets/drc-logo.png" alt="District Running Collective" style="width:56px;height:auto;display:block">
+      <div>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.26em;color:#e52240;margin-bottom:8px">MEMBER PASS + CHECK-IN</div>
+        <h1 style="margin:0;font-size:44px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.94;letter-spacing:-.02em">One code, every run</h1>
+      </div>
+    </div>
+    <p style="margin:0;font-size:15px;font-weight:500;line-height:1.6;color:#8a8a8a;max-width:440px">A runner makes a profile once and keeps the same QR forever. Captains scan it from a phone, or the kiosk scans it at the start. Every scan writes a check-in and the runner's profile counts up.</p>
+  </div>
+
+  <div style="height:1px;background:#232323;margin:32px 0 40px"></div>
+
+  <div class="drc-mobile-switch" style="display:none;gap:8px;margin-bottom:24px">
+    <button type="button" onClick="{{ setMobilePanel }}" data-panel="runner" style="{{ mobileSwitchStyle.runner }}">Runner</button>
+    <button type="button" onClick="{{ setMobilePanel }}" data-panel="captain" style="{{ mobileSwitchStyle.captain }}">Captain</button>
+    <button type="button" onClick="{{ setMobilePanel }}" data-panel="kiosk" style="{{ mobileSwitchStyle.kiosk }}">Kiosk</button>
+  </div>
+
+  <div class="drc-cols-row" style="display:flex;gap:56px;flex-wrap:wrap;justify-content:center;align-items:flex-start">
+
+    <div class="drc-col" data-active="{{ isMobilePanelRunner }}" style="display:flex;flex-direction:column;gap:20px;align-items:flex-start">
+      <div style="display:flex;align-items:baseline;gap:16px">
+        <span style="font-size:12px;font-weight:900;color:#e52240;letter-spacing:.2em">RUNNER</span>
+        <span style="font-size:15px;font-weight:600;color:#7a7a7a">{{ runnerLabel }}</span>
+      </div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div style="min-height:100%;background:#000;display:flex;flex-direction:column;padding:60px 0 0">
+
+          <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:6px 24px 40px;display:flex;flex-direction:column;min-height:100%;box-sizing:border-box">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px">
+                <img src="assets/drc-logo.png" alt="DRC" style="width:34px;height:auto;display:block">
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240">DISTRICT RUNNING COLLECTIVE</div>
+              </div>
+
+              <sc-if value="{{ isLandingMenu }}" hint-placeholder-val="{{ true }}">
+                <h2 style="margin:0 0 8px;font-size:32px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.96">Get started</h2>
+                <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6;margin-bottom:30px">Runner, captain or admin — pick one.</div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <button type="button" onClick="{{ goSignupFromLanding }}" style="width:100%;min-height:56px;background:#e52240;color:#000;border:none;font-size:16px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;border-radius:2px">Create my pass</button>
+                  <button type="button" onClick="{{ goResend }}" style="width:100%;min-height:52px;background:transparent;color:#fff;border:1px solid #2a2a2a;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px">Access my pass by email</button>
+                  <div style="height:1px;background:#1e1e1e;margin:8px 0"></div>
+                  <button type="button" onClick="{{ goGate }}" style="width:100%;min-height:52px;background:transparent;color:#e52240;border:1px solid #e52240;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px">Captain check-in</button>
+                  <button type="button" onClick="{{ goGate }}" style="width:100%;min-height:52px;background:transparent;color:#e52240;border:1px solid #e52240;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px">Admin dashboard</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isLandingResend }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ goLandingMenu }}" style="align-self:flex-start;background:none;border:none;color:#6a6a6a;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding:0;margin-bottom:20px">← Back</button>
+                <h2 style="margin:0 0 8px;font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98">Access my pass</h2>
+                <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6;margin-bottom:22px">Enter the email you signed up with. We'll sign you back into your pass and profile.</div>
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <input type="email" value="{{ resendEmail }}" onInput="{{ setResendEmail }}" placeholder="you@email.com" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:16px;font-weight:600;padding:14px;border-radius:2px">
+                  <sc-if value="{{ resendErr }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#2a0b12;border-left:3px solid #e52240;padding:12px 14px;font-size:13px;font-weight:600;color:#ff8496">{{ resendErr }}</div>
+                  </sc-if>
+                  <button type="button" onClick="{{ sendResendEmail }}" style="width:100%;min-height:56px;background:#e52240;color:#000;border:none;font-size:16px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;border-radius:2px">Email me my pass</button>
+                  <button type="button" onClick="{{ sendResendEmail }}" style="width:100%;min-height:52px;background:transparent;color:#fff;border:1px solid #2a2a2a;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px">Access my pass</button>
+                  <div style="font-size:11px;font-weight:500;color:#5a5a5a;line-height:1.5">Simulated for demo — a real email would carry a sign-in link that opens your pass on tap.</div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isLandingGate }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ goLandingMenu }}" style="align-self:flex-start;background:none;border:none;color:#6a6a6a;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding:0;margin-bottom:14px">← Back</button>
+
+                <sc-if value="{{ locked }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-direction:column;gap:22px;flex:1;justify-content:center">
+                    <div>
+                      <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:10px">CAPTAINS + ADMINS ONLY</div>
+                      <h2 style="margin:0 0 8px;font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98">Enter passcode</h2>
+                      <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6">Captain code unlocks scanning. Admin code also unlocks the dashboard and events.</div>
+                    </div>
+                    <div style="display:flex;gap:14px;justify-content:center;padding:8px 0">
+                      <sc-for list="{{ pinDots }}" as="d" hint-placeholder-count="4">
+                        <div style="{{ d.style }}"></div>
+                      </sc-for>
+                    </div>
+                    <sc-if value="{{ pinErr }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:12px;font-weight:700;color:#ff8496;text-align:center">{{ pinErr }}</div>
+                    </sc-if>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                      <sc-for list="{{ keys }}" as="k" hint-placeholder-count="12">
+                        <button type="button" onClick="{{ k.press }}" style="{{ k.style }}">{{ k.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div style="font-size:11px;font-weight:600;color:#5a5a5a;text-align:center;letter-spacing:.1em">{{ codeHint }}</div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ unlocked }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:16px;flex:1;justify-content:center;text-align:center">
+                    <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#4ade80">PASSCODE ACCEPTED</div>
+                    <h2 style="margin:0;font-size:26px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1">Signed in as {{ roleTag }}</h2>
+                    <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6">The captain surface has unlocked with these tools.</div>
+                    <button type="button" onClick="{{ lockIt }}" style="margin-top:6px;background:none;border:none;color:#6a6a6a;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Sign out</button>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:6px 24px 40px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
+                <img src="assets/drc-logo.png" alt="DRC" style="width:30px;height:auto;display:block">
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240">ONE TIME SETUP</div>
+              </div>
+              <button type="button" onClick="{{ goLandingMenu }}" style="background:none;border:none;color:#6a6a6a;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding:0;margin-bottom:16px">← Back</button>
+              <h2 style="margin:0 0 8px;font-size:34px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.96">Make your pass</h2>
+              <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6;margin-bottom:24px">Takes 30 seconds. Your QR never changes, so save it to your wallet and forget about it.</div>
+
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;gap:10px">
+                  <div style="flex:1">
+                    <label for="mfn" style="display:block;font-size:10px;font-weight:800;letter-spacing:.18em;color:#8a8a8a;margin-bottom:8px">FIRST NAME</label>
+                    <input id="mfn" type="text" value="{{ form.firstName }}" onInput="{{ setFirstName }}" placeholder="First" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:16px;font-weight:600;padding:14px;border-radius:2px">
+                  </div>
+                  <div style="flex:1">
+                    <label for="mln" style="display:block;font-size:10px;font-weight:800;letter-spacing:.18em;color:#8a8a8a;margin-bottom:8px">LAST NAME</label>
+                    <input id="mln" type="text" value="{{ form.lastName }}" onInput="{{ setLastName }}" placeholder="Last" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:16px;font-weight:600;padding:14px;border-radius:2px">
+                  </div>
+                </div>
+                <div>
+                  <label for="me" style="display:block;font-size:10px;font-weight:800;letter-spacing:.18em;color:#8a8a8a;margin-bottom:8px">EMAIL</label>
+                  <input id="me" type="email" value="{{ form.email }}" onInput="{{ setEmail }}" placeholder="you@email.com" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:16px;font-weight:600;padding:14px;border-radius:2px">
+                  <div style="font-size:11px;font-weight:500;color:#6a6a6a;margin-top:8px;line-height:1.5">We send a sign-in link. No password to remember.</div>
+                </div>
+
+                <div>
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.18em;color:#8a8a8a;margin-bottom:10px">CHOOSE YOUR PACE GROUP</div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ paceOptions }}" as="p" hint-placeholder-count="5">
+                      <button type="button" onClick="{{ p.pick }}" style="{{ p.style }}">
+                        <span style="display:flex;justify-content:space-between;align-items:center;width:100%"><span>{{ p.name }}</span><span style="opacity:.7;font-weight:700">{{ p.time }}</span></span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <button type="button" onClick="{{ toggleWaiver }}" style="{{ waiverStyle }}">
+                  <span style="{{ waiverBoxStyle }}">{{ waiverTick }}</span>
+                  <span style="font-size:12px;font-weight:600;line-height:1.5;text-align:left">I agree to the waiver, terms and Code of Conduct</span>
+                </button>
+
+                <sc-if value="{{ error }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#2a0b12;border-left:3px solid #e52240;padding:12px 14px;font-size:13px;font-weight:600;color:#ff8496">{{ error }}</div>
+                </sc-if>
+
+                <button type="button" onClick="{{ createProfile }}" style="margin-top:6px;width:100%;min-height:56px;background:#e52240;color:#000;border:none;font-size:17px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;border-radius:2px">Create my pass</button>
+                <div style="font-size:11px;font-weight:500;color:#5a5a5a;line-height:1.5">Waivers are valid one year from signup. We'll email you before yours expires.</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isPass }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:6px 24px 30px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
+                <img src="assets/drc-logo.png" alt="DRC" style="width:30px;height:auto;display:block">
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240">{{ passStatus }}</div>
+              </div>
+
+              <sc-if value="{{ justSignedUp }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:#0f1a10;border-left:3px solid #4ade80;padding:10px 14px;margin-bottom:16px">
+                  <span style="font-size:12px;font-weight:600;color:#9ee8b0;line-height:1.4">Confirmation + your pass emailed to {{ myEmail }}.</span>
+                  <button type="button" onClick="{{ dismissSignupNotice }}" style="background:none;border:none;color:#9ee8b0;font-size:16px;font-weight:800;cursor:pointer;flex:0 0 auto">✕</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ waiverExpired }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#2a220b;border-left:3px solid #e8c34a;padding:14px 16px;margin-bottom:16px">
+                  <div style="font-size:13px;font-weight:700;color:#f0dc9a;margin-bottom:10px;line-height:1.5">Your waiver expired. Renew before your next run.</div>
+                  <button type="button" onClick="{{ renewWaiver }}" style="min-height:44px;padding:0 20px;background:#e8c34a;color:#000;border:none;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:2px">Renew waiver</button>
+                </div>
+              </sc-if>
+
+              <div style="{{ passCardStyle }}">
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+                  <label style="position:relative;flex:0 0 auto;width:66px;height:66px;border-radius:50%;overflow:hidden;cursor:pointer;background:#1a1a1a;border:2px solid #e52240;display:flex;align-items:center;justify-content:center">
+                    <sc-if value="{{ hasPhoto }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ myPhotoStyle }}"></div>
+                    </sc-if>
+                    <sc-if value="{{ noPhoto }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-size:22px;font-weight:900;font-style:italic;color:#e52240">{{ myInitials }}</span>
+                    </sc-if>
+                    <input type="file" accept="image/*" onChange="{{ setPhoto }}" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+                  </label>
+                  <div style="min-width:0">
+                    <div style="font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1.03;margin-bottom:6px">{{ myName }}</div>
+                    <label style="display:inline-block;position:relative;font-size:10px;font-weight:800;letter-spacing:.16em;color:#8a8a8a;cursor:pointer;border-bottom:1px solid #3a3a3a;padding-bottom:2px">
+                      {{ photoLabel }}
+                      <input type="file" accept="image/*" onChange="{{ setPhoto }}" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+                    </label>
+                  </div>
+                </div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:14px">SCAN AT ANY DRC RUN</div>
+                <div style="background:#fff;padding:16px;display:flex;align-items:center;justify-content:center;margin-bottom:18px">{{ qr }}</div>
+                <div style="display:flex;gap:24px">
+                  <div>
+                    <div style="font-size:9px;font-weight:800;letter-spacing:.16em;color:#6a6a6a;margin-bottom:5px">PACE GROUP</div>
+                    <div style="font-size:13px;font-weight:700;color:#e52240;letter-spacing:.08em;text-transform:uppercase">{{ myPace }}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:9px;font-weight:800;letter-spacing:.16em;color:#6a6a6a;margin-bottom:5px">SATURDAYS</div>
+                    <div style="font-size:13px;font-weight:700;color:#e52240;letter-spacing:.08em;text-transform:uppercase">{{ myDist }}</div>
+                  </div>
+                </div>
+                <div style="height:1px;background:#2a2a2a;margin:18px 0"></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:#8a8a8a">
+                  <span>MEMBER SINCE {{ myJoined }}</span>
+                  <span style="color:#fff;letter-spacing:.1em">{{ myCode }}</span>
+                </div>
+              </div>
+
+              <sc-if value="{{ myCheckedIn }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:20px">
+                  <div style="background:#e52240;color:#000;padding:18px 20px">
+                    <div style="font-size:24px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1">Checked in</div>
+                    <div style="font-size:12px;font-weight:700;margin-top:6px;letter-spacing:.06em">{{ checkedInLine }}</div>
+                  </div>
+                  <sc-if value="{{ showPerk }}" hint-placeholder-val="{{ false }}">
+                    <div style="border:1px dashed #e52240;border-top:none;padding:18px 20px;background:#140609">
+                      <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:10px">PACERS × DRC POP-UP</div>
+                      <div style="font-size:15px;font-weight:600;color:#b4b4b4;line-height:1.5;margin-bottom:12px">15% off today at the pop-up. Show this code at the register.</div>
+                      <div style="font-size:26px;font-weight:900;letter-spacing:.14em;font-style:italic">{{ perkCode }}</div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ notCheckedIn }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:20px;border:1px solid #232323;padding:18px 20px">
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:8px">NEXT UP</div>
+                  <div style="font-size:17px;font-weight:800;line-height:1.3">{{ nextRunName }}</div>
+                  <div style="font-size:13px;font-weight:600;color:#7a7a7a;margin-top:6px;line-height:1.5">{{ nextRunMeta }}</div>
+                  <div style="font-size:12px;font-weight:700;color:#e52240;margin-top:12px;letter-spacing:.08em">{{ nextRunRsvp }}</div>
+                </div>
+              </sc-if>
+
+              <button type="button" onClick="{{ signOut }}" style="margin-top:22px;background:none;border:none;color:#6a6a6a;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding:0">Not you? Sign out</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:6px 24px 30px">
+              <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+                <label style="position:relative;flex:0 0 auto;width:78px;height:78px;border-radius:50%;overflow:hidden;cursor:pointer;background:#1a1a1a;border:2px solid #e52240;display:flex;align-items:center;justify-content:center">
+                  <sc-if value="{{ hasPhoto }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ myPhotoStyle }}"></div>
+                  </sc-if>
+                  <sc-if value="{{ noPhoto }}" hint-placeholder-val="{{ true }}">
+                    <span style="font-size:26px;font-weight:900;font-style:italic;color:#e52240">{{ myInitials }}</span>
+                  </sc-if>
+                  <input type="file" accept="image/*" onChange="{{ setPhoto }}" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+                </label>
+                <div style="min-width:0">
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:8px">MEMBER SINCE {{ myJoined }}</div>
+                  <h2 style="margin:0;font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98">{{ myName }}</h2>
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px">
+                <div style="background:#0f0f0f;border-top:3px solid #e52240;padding:20px 16px">
+                  <div style="font-size:52px;font-weight:900;font-style:italic;line-height:.9;color:#e52240">{{ myRuns }}</div>
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.14em;color:#8a8a8a;margin-top:10px">RUNS ATTENDED</div>
+                </div>
+                <div style="background:#0f0f0f;border-top:3px solid #2a2a2a;padding:20px 16px">
+                  <div style="font-size:52px;font-weight:900;font-style:italic;line-height:.9">{{ myStreak }}</div>
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.14em;color:#8a8a8a;margin-top:10px">WEEK STREAK</div>
+                </div>
+              </div>
+
+              <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:12px">MILESTONES</div>
+              <div style="display:flex;gap:8px;margin-bottom:12px">
+                <sc-for list="{{ badges }}" as="b" hint-placeholder-count="4">
+                  <div style="{{ b.style }}">
+                    <div style="font-size:24px;font-weight:900;font-style:italic;line-height:1">{{ b.n }}</div>
+                    <div style="font-size:9px;font-weight:800;letter-spacing:.1em;margin-top:4px">{{ b.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:#7a7a7a;margin-bottom:24px">{{ nextMilestoneLine }}</div>
+
+              <div style="border:1px solid #232323;padding:16px 18px;margin-bottom:24px">
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:10px">SHARE YOUR STRAVA</div>
+                <input type="text" value="{{ stravaLink }}" onInput="{{ setStravaLink }}" placeholder="https://strava.app.link/..." style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:13px;font-weight:600;padding:12px;border-radius:2px">
+                <sc-if value="{{ hasStrava }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;padding:14px;display:flex;align-items:center;justify-content:center;margin-top:14px">{{ stravaQr }}</div>
+                  <div style="font-size:11px;font-weight:600;color:#6a6a6a;margin-top:8px;text-align:center">Other runners can scan this to follow you on Strava.</div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-bottom:16px">
+                <button type="button" onClick="{{ goPanelCheckins }}" style="{{ panelCheckinsStyle }}">RECENT CHECK-INS</button>
+                <button type="button" onClick="{{ goPanelGuidelines }}" style="{{ panelGuidelinesStyle }}">GUIDELINES</button>
+              </div>
+
+              <sc-if value="{{ isPanelCheckins }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a">RECENT CHECK-INS</div>
+                  <button type="button" onClick="{{ goRuns }}" style="background:none;border:none;color:#e52240;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;padding:0">See all →</button>
+                </div>
+                <div style="display:flex;flex-direction:column">
+                  <sc-for list="{{ historyPreview }}" as="h" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #191919">
+                      <span style="font-size:14px;font-weight:700">{{ h.name }}</span>
+                      <span style="font-size:12px;font-weight:600;color:#7a7a7a;letter-spacing:.06em">{{ h.date }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isPanelGuidelines }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ guidelines }}" as="g" hint-placeholder-count="4">
+                    <div style="font-size:12px;font-weight:600;color:#b4b4b4;line-height:1.5">{{ g.text }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <button type="button" onClick="{{ signOut }}" style="margin-top:22px;background:none;border:none;color:#6a6a6a;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding:12px 0;text-align:left">← Start over as a new member</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isRuns }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:6px 24px 30px">
+              <h2 style="margin:0 0 6px;font-size:30px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98">This week</h2>
+              <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6;margin-bottom:22px">RSVP so captains know the headcount. Your QR still checks you in either way.</div>
+              <div style="display:flex;flex-direction:column;gap:12px">
+                <sc-for list="{{ runList }}" as="r" hint-placeholder-count="4">
+                  <div style="{{ r.cardStyle }}">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                      <span style="font-size:10px;font-weight:800;letter-spacing:.18em;color:#e52240">{{ r.day }}</span>
+                      <span style="font-size:11px;font-weight:700;color:#7a7a7a;letter-spacing:.06em">{{ r.rsvpCount }}</span>
+                    </div>
+                    <div style="font-size:20px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1.05;margin:8px 0 6px">{{ r.name }}</div>
+                    <div style="font-size:12px;font-weight:600;color:#8a8a8a;line-height:1.5;margin-bottom:14px">{{ r.meta }}</div>
+                    <button type="button" onClick="{{ r.toggle }}" style="{{ r.btnStyle }}">{{ r.btnLabel }}</button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasProfile }}" hint-placeholder-val="{{ false }}">
+            <div style="position:sticky;bottom:0;margin-top:auto;display:flex;border-top:1px solid #1e1e1e;background:#000">
+              <button type="button" onClick="{{ goPass }}" style="{{ navPassStyle }}">PASS</button>
+              <button type="button" onClick="{{ goProfile }}" style="{{ navProfileStyle }}">PROFILE</button>
+              <button type="button" onClick="{{ goRuns }}" style="{{ navRunsStyle }}">RUNS</button>
+            </div>
+          </sc-if>
+
+        </div>
+      </x-import>
+    </div>
+
+    <div class="drc-col" data-active="{{ isMobilePanelCaptain }}" style="display:flex;flex-direction:column;gap:20px;align-items:flex-start">
+      <div style="display:flex;align-items:baseline;gap:16px">
+        <span style="font-size:12px;font-weight:900;color:#e52240;letter-spacing:.2em">CAPTAIN</span>
+        <span style="font-size:15px;font-weight:600;color:#7a7a7a">{{ captainLabel }}</span>
+      </div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div style="min-height:100%;background:#000;display:flex;flex-direction:column;padding:60px 0 0">
+
+          <sc-if value="{{ locked }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px 40px;gap:22px">
+              <div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:10px">CAPTAINS + ADMINS ONLY</div>
+                <h2 style="margin:0 0 8px;font-size:30px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98">Enter passcode</h2>
+                <div style="font-size:13px;font-weight:600;color:#8a8a8a;line-height:1.6">Captain code unlocks scanning. Admin code also unlocks the dashboard and events.</div>
+              </div>
+
+              <div style="display:flex;gap:14px;justify-content:center;padding:8px 0">
+                <sc-for list="{{ pinDots }}" as="d" hint-placeholder-count="4">
+                  <div style="{{ d.style }}"></div>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ pinErr }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12px;font-weight:700;color:#ff8496;text-align:center">{{ pinErr }}</div>
+              </sc-if>
+
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                <sc-for list="{{ keys }}" as="k" hint-placeholder-count="12">
+                  <button type="button" onClick="{{ k.press }}" style="{{ k.style }}">{{ k.label }}</button>
+                </sc-for>
+              </div>
+
+              <div style="font-size:11px;font-weight:600;color:#5a5a5a;text-align:center;letter-spacing:.1em">{{ codeHint }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ unlocked }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:6px 20px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <button type="button" onClick="{{ cycleEvent }}" style="background:none;border:none;padding:0;text-align:left;cursor:pointer;color:#fff">
+              <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:6px">{{ eventDay }} ⌄</div>
+              <div style="font-size:19px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1">{{ eventName }}</div>
+            </button>
+            <div style="text-align:right;flex:0 0 auto">
+              <div style="font-size:9px;font-weight:900;letter-spacing:.14em;color:#5a5a5a;margin-bottom:4px">{{ roleTag }}</div>
+              <div style="font-size:26px;font-weight:900;font-style:italic;line-height:1;color:#e52240">{{ checkedCount }}</div>
+              <div style="font-size:10px;font-weight:700;color:#8a8a8a;letter-spacing:.1em">OF {{ rsvpCount }} RSVP</div>
+            </div>
+          </div>
+
+          <div style="display:flex;border-top:1px solid #1e1e1e;border-bottom:1px solid #1e1e1e">
+            <button type="button" onClick="{{ goCheckIn }}" style="{{ tabCheckInStyle }}">CHECK-IN</button>
+            <sc-if value="{{ showAdminTabs }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ goDash }}" style="{{ tabDashStyle }}">DASHBOARD</button>
+              <button type="button" onClick="{{ goEvents }}" style="{{ tabEventsStyle }}">EVENTS</button>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ hasNotice }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:16px 20px 0;background:#0f1a10;border-left:3px solid #4ade80;padding:12px 14px;font-size:12px;font-weight:700;color:#9ee8b0;line-height:1.5">{{ notice }}</div>
+          </sc-if>
+
+          <sc-if value="{{ eventCancelled }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:16px 20px 0;background:#2a0b12;border-left:3px solid #e52240;padding:12px 14px;font-size:12px;font-weight:800;letter-spacing:.08em;color:#ff8496">THIS RUN IS CANCELLED</div>
+          </sc-if>
+
+          <sc-if value="{{ eventHold }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:16px 20px 0;background:#2a220b;border-left:3px solid #e8c34a;padding:12px 14px;font-size:12px;font-weight:800;letter-spacing:.08em;color:#f0dc9a">WEATHER HOLD — MEET BUT EXPECT DELAY</div>
+          </sc-if>
+
+          <sc-if value="{{ isCheckInTab }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:20px;display:flex;flex-direction:column;gap:18px">
+
+              <div style="position:relative;aspect-ratio:1;background:#0d0d0d;border:1px solid #1e1e1e;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                <div style="position:absolute;top:22px;left:22px;width:34px;height:34px;border-top:3px solid #e52240;border-left:3px solid #e52240"></div>
+                <div style="position:absolute;top:22px;right:22px;width:34px;height:34px;border-top:3px solid #e52240;border-right:3px solid #e52240"></div>
+                <div style="position:absolute;bottom:22px;left:22px;width:34px;height:34px;border-bottom:3px solid #e52240;border-left:3px solid #e52240"></div>
+                <div style="position:absolute;bottom:22px;right:22px;width:34px;height:34px;border-bottom:3px solid #e52240;border-right:3px solid #e52240"></div>
+
+                <sc-if value="{{ scan }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:24px;text-align:center;width:100%">
+                    <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:12px">{{ scanLabel }}</div>
+                    <div style="font-size:28px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:1;margin-bottom:10px">{{ scan.name }}</div>
+                    <div style="font-size:12px;font-weight:700;color:#b4b4b4;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px">{{ scanMeta }}</div>
+                    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+                      <sc-for list="{{ scanBadges }}" as="b" hint-placeholder-count="2">
+                        <span style="{{ b.style }}">{{ b.label }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ noScan }}" hint-placeholder-val="{{ true }}">
+                  <div style="text-align:center;padding:26px">
+                    <div style="font-size:15px;font-weight:700;color:#7a7a7a;line-height:1.6">Point at a member's<br>pass to scan</div>
+                    <div style="font-size:11px;font-weight:600;color:#4a4a4a;line-height:1.6;margin-top:10px">Works offline. The code carries<br>name and pace group.</div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <sc-if value="{{ scan }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:10px">
+                  <button type="button" onClick="{{ confirmScan }}" style="flex:1;min-height:56px;background:#e52240;color:#000;border:none;font-size:16px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;border-radius:2px">{{ confirmLabel }}</button>
+                  <button type="button" onClick="{{ clearScan }}" style="min-width:56px;min-height:56px;background:transparent;color:#8a8a8a;border:1px solid #2a2a2a;font-size:20px;font-weight:800;cursor:pointer;border-radius:2px">✕</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ noScan }}" hint-placeholder-val="{{ true }}">
+                <button type="button" onClick="{{ simulateScan }}" style="width:100%;min-height:56px;background:#e52240;color:#000;border:none;font-size:16px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;border-radius:2px">Scan a pass</button>
+              </sc-if>
+
+              <div style="height:1px;background:#1e1e1e"></div>
+
+              <div>
+                <button type="button" onClick="{{ toggleGuestForm }}" style="width:100%;min-height:48px;background:transparent;color:#8a8a8a;border:1px dashed #3a3a3a;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border-radius:2px">{{ guestToggleLabel }}</button>
+                <sc-if value="{{ showGuestForm }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:12px;display:flex;gap:8px">
+                    <input type="text" value="{{ guestName }}" onInput="{{ setGuestName }}" placeholder="Guest's name" style="flex:1;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:14px;font-weight:600;padding:12px;border-radius:2px">
+                    <button type="button" onClick="{{ addGuestAndCheckIn }}" style="min-height:44px;padding:0 18px;background:#e52240;color:#000;border:none;font-size:12px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:2px">Check in</button>
+                  </div>
+                  <div style="font-size:11px;font-weight:500;color:#5a5a5a;margin-top:8px;line-height:1.5">No profile or waiver on file yet — have them make a real pass after the run.</div>
+                </sc-if>
+              </div>
+
+              <div style="height:1px;background:#1e1e1e"></div>
+
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a">OR FIND THEM BY NAME</div>
+                  <div style="font-size:11px;font-weight:700;color:#e52240">{{ remainingLabel }}</div>
+                </div>
+                <input type="search" value="{{ query }}" onInput="{{ setQuery }}" placeholder="Search all members" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:16px;font-weight:600;padding:14px;border-radius:2px;margin-bottom:12px">
+                <div style="display:flex;flex-direction:column">
+                  <sc-for list="{{ filtered }}" as="r" hint-placeholder-count="5">
+                    <button type="button" onClick="{{ r.toggle }}" style="{{ r.rowStyle }}">
+                      <span style="display:flex;flex-direction:column;gap:4px;text-align:left;min-width:0">
+                        <span style="font-size:16px;font-weight:800;letter-spacing:.01em">{{ r.name }}</span>
+                        <span style="font-size:11px;font-weight:600;color:#7a7a7a;letter-spacing:.06em;text-transform:uppercase">{{ r.meta }}</span>
+                      </span>
+                      <span style="{{ r.pillStyle }}">{{ r.pill }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:22px 0;font-size:14px;font-weight:600;color:#6a6a6a">No member by that name. They can make a pass on the spot in under a minute.</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isDashTab }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px;display:flex;flex-direction:column;gap:22px">
+
+              <div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:12px">LIVE HEADCOUNT</div>
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <span style="font-size:72px;font-weight:900;font-style:italic;line-height:.86;color:#e52240">{{ checkedCount }}</span>
+                  <span style="font-size:17px;font-weight:700;color:#6a6a6a">/ {{ rsvpCount }} RSVP'd</span>
+                </div>
+                <div style="height:8px;background:#1a1a1a;margin-top:16px">
+                  <div style="{{ barStyle }}"></div>
+                </div>
+                <div style="font-size:12px;font-weight:600;color:#7a7a7a;margin-top:10px">{{ turnoutLabel }}</div>
+              </div>
+
+              <div style="display:flex;gap:12px">
+                <div style="flex:1;background:#0f0f0f;border-top:3px solid #e52240;padding:16px">
+                  <div style="font-size:32px;font-weight:900;font-style:italic;line-height:1">{{ newCount }}</div>
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.14em;color:#8a8a8a;margin-top:6px">FIRST RUN<br>TODAY</div>
+                </div>
+                <div style="flex:1;background:#0f0f0f;border-top:3px solid #2a2a2a;padding:16px">
+                  <div style="font-size:32px;font-weight:900;font-style:italic;line-height:1">{{ walkupCount }}</div>
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.14em;color:#8a8a8a;margin-top:6px">WALK-UPS<br>NO RSVP</div>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:14px">{{ groupHeading }}</div>
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <sc-for list="{{ paceStats }}" as="g" hint-placeholder-count="4">
+                    <div>
+                      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:7px">
+                        <span style="text-transform:uppercase;letter-spacing:.05em">{{ g.name }}</span>
+                        <span style="color:#8a8a8a">{{ g.label }}</span>
+                      </div>
+                      <div style="height:6px;background:#1a1a1a">
+                        <div style="{{ g.barStyle }}"></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:14px">MOST RUNS · ALL TIME</div>
+                <div style="display:flex;flex-direction:column">
+                  <sc-for list="{{ leaders }}" as="s" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #191919">
+                      <span style="font-size:15px;font-weight:700">{{ s.name }}</span>
+                      <span style="font-size:13px;font-weight:800;color:#e52240;letter-spacing:.08em">{{ s.runs }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <sc-if value="{{ hasNoShows }}" hint-placeholder-val="{{ false }}">
+                <div>
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:14px">RSVP'D, NOT HERE YET</div>
+                  <div style="display:flex;flex-direction:column">
+                    <sc-for list="{{ noShows }}" as="n" hint-placeholder-count="3">
+                      <div style="padding:10px 0;border-bottom:1px solid #191919;font-size:14px;font-weight:700;color:#c4c4c4">{{ n.name }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <button type="button" onClick="{{ exportCsv }}" style="width:100%;min-height:56px;background:transparent;color:#e52240;border:2px solid #e52240;font-size:15px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;border-radius:2px">Export check-ins to CSV</button>
+              <button type="button" onClick="{{ lockIt }}" style="background:none;border:none;color:#6a6a6a;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;padding:6px 0 24px;text-align:left">Lock this phone</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isEventsTab }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px;display:flex;flex-direction:column;gap:22px">
+
+              <div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a;margin-bottom:12px">ALL EVENTS</div>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <sc-for list="{{ eventRows }}" as="x" hint-placeholder-count="4">
+                    <div style="{{ x.rowStyle }}">
+                      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px">
+                        <span style="font-size:15px;font-weight:800;text-transform:uppercase">{{ x.name }}</span>
+                        <sc-if value="{{ x.cancelledTag }}" hint-placeholder-val="{{ false }}">
+                          <span style="font-size:10px;font-weight:900;letter-spacing:.1em;color:#e52240">{{ x.cancelledTag }}</span>
+                        </sc-if>
+                      </div>
+                      <div style="font-size:12px;font-weight:600;color:#8a8a8a;margin-bottom:12px">{{ x.meta }}</div>
+                      <div style="display:flex;gap:8px">
+                        <button type="button" onClick="{{ x.edit }}" style="flex:1;min-height:40px;cursor:pointer;border-radius:2px;font-size:10px;font-weight:900;letter-spacing:.12em;background:transparent;color:#8a8a8a;border:1px solid #2a2a2a">EDIT</button>
+                        <button type="button" onClick="{{ x.toggleHold }}" style="{{ x.holdStyle }}">{{ x.holdLabel }}</button>
+                        <button type="button" onClick="{{ x.toggleCancel }}" style="{{ x.cancelStyle }}">{{ x.cancelLabel }}</button>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="height:1px;background:#1e1e1e"></div>
+
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                  <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#8a8a8a">{{ eventFormTitle }}</div>
+                  <sc-if value="{{ isEditingEvent }}" hint-placeholder-val="{{ false }}">
+                    <button type="button" onClick="{{ newEventForm }}" style="background:none;border:none;color:#e52240;font-size:10px;font-weight:800;letter-spacing:.1em;cursor:pointer">+ NEW INSTEAD</button>
+                  </sc-if>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <input type="text" value="{{ eventForm.name }}" onInput="{{ setEventName }}" placeholder="Run name" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:15px;font-weight:600;padding:13px;border-radius:2px">
+                  <div style="display:flex;gap:10px">
+                    <input type="text" value="{{ eventForm.date }}" onInput="{{ setEventDate }}" placeholder="Date, e.g. Sat, Sep 5" style="flex:1;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:14px;font-weight:600;padding:13px;border-radius:2px">
+                    <input type="text" value="{{ eventForm.time }}" onInput="{{ setEventTime }}" placeholder="Time, e.g. 7:00 AM" style="flex:1;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:14px;font-weight:600;padding:13px;border-radius:2px">
+                  </div>
+                  <input type="text" value="{{ eventForm.locationName }}" onInput="{{ setEventLocationName }}" placeholder="Location name" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:15px;font-weight:600;padding:13px;border-radius:2px">
+                  <input type="text" value="{{ eventForm.address }}" onInput="{{ setEventAddress }}" placeholder="Street address" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:15px;font-weight:600;padding:13px;border-radius:2px">
+                  <input type="text" value="{{ eventForm.notes }}" onInput="{{ setEventNotes }}" placeholder="Notes, optional" style="width:100%;box-sizing:border-box;background:#121212;border:1px solid #2a2a2a;color:#fff;font-size:15px;font-weight:600;padding:13px;border-radius:2px">
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <div style="display:flex;gap:8px">
+                      <button type="button" onClick="{{ setTypeWednesday }}" style="{{ typeWednesdayStyle }}">WEDNESDAY RUN</button>
+                      <button type="button" onClick="{{ setTypeSaturday }}" style="{{ typeSaturdayStyle }}">SATURDAY RUN</button>
+                      <button type="button" onClick="{{ setTypeSpecial }}" style="{{ typeSpecialStyle }}">SPECIAL EVENT</button>
+                    </div>
+                    <button type="button" onClick="{{ toggleEventRemind }}" style="{{ remindToggleStyle }}">REMIND RSVPS</button>
+                  </div>
+                  <button type="button" onClick="{{ saveEvent }}" style="width:100%;min-height:52px;background:#e52240;color:#000;border:none;font-size:15px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;border-radius:2px;margin-top:4px">{{ saveEventLabel }}</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+          </sc-if>
+
+        </div>
+      </x-import>
+    </div>
+
+    <div class="drc-col" data-active="{{ isMobilePanelKiosk }}" style="display:flex;flex-direction:column;gap:20px;align-items:flex-start">
+      <div style="display:flex;align-items:baseline;gap:16px">
+        <span style="font-size:12px;font-weight:900;color:#e52240;letter-spacing:.2em">KIOSK</span>
+        <span style="font-size:15px;font-weight:600;color:#7a7a7a">{{ kioskLabel }}</span>
+      </div>
+      <div style="width:470px;background:#141414;border:1px solid #262626;border-radius:26px;padding:16px">
+        <div style="background:#000;border-radius:14px;overflow:hidden;height:640px;display:flex;flex-direction:column">
+
+          <sc-if value="{{ kioskLocked }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 44px;gap:14px;overflow:hidden">
+              <img src="assets/drc-logo.png" alt="DRC" style="width:36px;height:auto;display:block">
+              <div>
+                <div style="font-size:10px;font-weight:800;letter-spacing:.22em;color:#e52240;margin-bottom:8px">KIOSK LOCKED</div>
+                <div style="font-size:26px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98">Admin passcode<br>to start</div>
+              </div>
+              <div style="display:flex;gap:14px;justify-content:center">
+                <sc-for list="{{ kpinDots }}" as="d" hint-placeholder-count="4">
+                  <div style="{{ d.style }}"></div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ pinErr }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12px;font-weight:700;color:#ff8496">{{ pinErr }}</div>
+              </sc-if>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:230px">
+                <sc-for list="{{ kkeys }}" as="k" hint-placeholder-count="12">
+                  <button type="button" onClick="{{ k.press }}" style="{{ k.style }}">{{ k.label }}</button>
+                </sc-for>
+              </div>
+              <div style="font-size:11px;font-weight:600;color:#5a5a5a;letter-spacing:.08em">{{ codeHint }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ kioskIdle }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 36px;gap:26px">
+              <img src="assets/drc-logo.png" alt="DRC" style="width:52px;height:auto;display:block">
+              <div>
+                <div style="font-size:11px;font-weight:800;letter-spacing:.24em;color:#e52240;margin-bottom:12px">{{ eventDay }} · {{ eventName }}</div>
+                <sc-if value="{{ eventCancelled }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:36px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98;color:#ff8496">This run is<br>cancelled</div>
+                </sc-if>
+                <sc-if value="{{ eventHold }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:36px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.98;color:#f0dc9a">Weather hold —<br>expect delay</div>
+                </sc-if>
+                <sc-if value="{{ notEventCancelled }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:42px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.94">Hold your<br>pass up</div>
+                </sc-if>
+              </div>
+              <div style="position:relative;width:190px;height:190px;border:1px solid #1e1e1e;background:#0d0d0d">
+                <div style="position:absolute;top:14px;left:14px;width:30px;height:30px;border-top:3px solid #e52240;border-left:3px solid #e52240"></div>
+                <div style="position:absolute;top:14px;right:14px;width:30px;height:30px;border-top:3px solid #e52240;border-right:3px solid #e52240"></div>
+                <div style="position:absolute;bottom:14px;left:14px;width:30px;height:30px;border-bottom:3px solid #e52240;border-left:3px solid #e52240"></div>
+                <div style="position:absolute;bottom:14px;right:14px;width:30px;height:30px;border-bottom:3px solid #e52240;border-right:3px solid #e52240"></div>
+              </div>
+              <div style="font-size:14px;font-weight:600;color:#7a7a7a;line-height:1.6">{{ kioskCountLine }}</div>
+              <div style="display:flex;align-items:center;gap:18px">
+                <button type="button" onClick="{{ kioskScan }}" style="min-height:52px;padding:0 28px;background:transparent;color:#e52240;border:2px solid #e52240;font-size:14px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;border-radius:2px">Simulate a scan</button>
+                <button type="button" onClick="{{ lockKiosk }}" style="background:none;border:none;color:#5a5a5a;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;padding:12px 0">Lock</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ kioskDone }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;display:flex;flex-direction:column">
+              <div style="background:#e52240;color:#000;padding:30px 36px;display:flex;align-items:center;gap:20px">
+                <sc-if value="{{ kioskHasPhoto }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ kioskPhotoStyle }}"></div>
+                </sc-if>
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:800;letter-spacing:.2em;margin-bottom:10px">{{ kioskStatus }}</div>
+                  <div style="font-size:42px;font-weight:900;font-style:italic;text-transform:uppercase;line-height:.92">{{ kioskName }}</div>
+                </div>
+              </div>
+              <div style="padding:30px 36px;display:flex;flex-direction:column;gap:26px">
+                <div style="display:flex;gap:14px">
+                  <div style="flex:1;border-top:2px solid #2a2a2a;padding-top:12px">
+                    <div style="font-size:30px;font-weight:900;font-style:italic;line-height:1">{{ kioskRuns }}</div>
+                    <div style="font-size:10px;font-weight:800;letter-spacing:.12em;color:#8a8a8a;margin-top:6px">RUNS</div>
+                  </div>
+                  <div style="flex:1;border-top:2px solid #2a2a2a;padding-top:12px">
+                    <div style="font-size:30px;font-weight:900;font-style:italic;line-height:1">{{ kioskStreak }}</div>
+                    <div style="font-size:10px;font-weight:800;letter-spacing:.12em;color:#8a8a8a;margin-top:6px">WEEK STREAK</div>
+                  </div>
+                  <div style="flex:1;border-top:2px solid #e52240;padding-top:12px">
+                    <div style="font-size:17px;font-weight:900;font-style:italic;line-height:1.1;text-transform:uppercase">{{ kioskPace }}</div>
+                    <div style="font-size:10px;font-weight:800;letter-spacing:.12em;color:#8a8a8a;margin-top:6px">{{ groupLabel }}</div>
+                  </div>
+                </div>
+
+                <sc-if value="{{ kioskPerk }}" hint-placeholder-val="{{ true }}">
+                  <div style="border:1px dashed #e52240;padding:22px 24px;background:#140609">
+                    <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:10px">PACERS × DRC POP-UP · 15% OFF TODAY</div>
+                    <div style="font-size:34px;font-weight:900;font-style:italic;letter-spacing:.12em">{{ perkCode }}</div>
+                    <div style="font-size:13px;font-weight:600;color:#8a8a8a;margin-top:10px;line-height:1.5">Also sent to your email. One use, expires tonight.</div>
+                  </div>
+                </sc-if>
+
+                <div style="font-size:14px;font-weight:600;color:#6a6a6a;line-height:1.6">{{ kioskMilestone }}</div>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+      <div style="width:470px;box-sizing:border-box;border:1px solid #232323;padding:20px 22px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.2em;color:#e52240;margin-bottom:12px">WHAT THE QR CARRIES</div>
+        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#b4b4b4;word-break:break-all;line-height:1.6;background:#0f0f0f;padding:12px 14px">{{ payload }}</div>
+        <p style="margin:12px 0 0;font-size:13px;font-weight:500;line-height:1.6;color:#8a8a8a">Version, member ID, name and pace group, signed. The scanner reads it with no signal and queues the check-in until it reconnects. The ID is the only thing the backend needs — name and pace are there so the screen can greet a runner offline.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1240px;margin:64px auto 0;padding-top:36px;border-top:1px solid #232323;display:grid;grid-template-columns:repeat(3,1fr);gap:44px">
+    <div>
+      <div style="font-size:11px;font-weight:900;letter-spacing:.2em;color:#e52240;margin-bottom:12px">THE DATA MODEL</div>
+      <p style="margin:0;font-size:14px;font-weight:500;line-height:1.65;color:#9a9a9a">Four tables: members, events, rsvps, check-ins. Runs attended, streak and milestones are all counted off the check-ins table, so nothing is entered by hand.</p>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:900;letter-spacing:.2em;color:#e52240;margin-bottom:12px">BUILDING IT FAST</div>
+      <p style="margin:0;font-size:14px;font-weight:500;line-height:1.65;color:#9a9a9a">Supabase gives you email magic links, the database and row-level security out of the box. Captains get an admin role; the kiosk runs one shared device account.</p>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:900;letter-spacing:.2em;color:#e52240;margin-bottom:12px">SAMPLE DATA</div>
+      <p style="margin:0;font-size:14px;font-weight:500;line-height:1.65;color:#9a9a9a">Members, counts and discount codes here are invented for the demo. Real history would come from your existing RSVP records.</p>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"adminCode":{"editor":"text","default":"0202","tsType":"string","section":"Behavior"},"captainCode":{"editor":"text","default":"1111","tsType":"string","section":"Behavior"},"perks":{"editor":"boolean","default":true,"tsType":"boolean","section":"Behavior"},"requireWaiver":{"editor":"boolean","default":true,"tsType":"boolean","section":"Behavior"},"accent":{"editor":"color","default":"#e52240","options":["#e52240","#f11111","#ffffff"],"tsType":"string","section":"Brand"}}'>
+
+const PACES = ["Flyers", "Movers", "Groovers I", "Groovers II", "Cruisers"];
+const PACE_TIMES = { "Flyers": "Sub 7:00/mi", "Movers": "7:00–8:00/mi", "Groovers I": "8:00–9:00/mi", "Groovers II": "9:00–10:00/mi", "Cruisers": "10:00+/mi" };
+const DISTANCES = ["Long Distance", "Mid Distance", "Short Distance"];
+
+const DEFAULT_EVENTS = [
+  { id: "tue", name: "Speed Work", date: "Tue, Aug 25", time: "6:30 PM", locationName: "RFK Track", address: "2400 East Capitol St SE, Washington, DC", notes: "Ladders + strides", mileage: false, special: false, cancelled: false, hold: false, remind: true },
+  { id: "thu", name: "Social 5K", date: "Thu, Aug 27", time: "6:45 PM", locationName: "Navy Yard", address: "1201 Half St SE, Washington, DC", notes: "No one left behind", mileage: false, special: false, cancelled: false, hold: false, remind: true },
+  { id: "sat", name: "Saturday Run", date: "Sat, Aug 29", time: "7:00 AM", locationName: "Union Market", address: "1309 5th St NE, Washington, DC", notes: "Long, mid and short distance", mileage: true, special: false, cancelled: false, hold: false, remind: true },
+  { id: "pop", name: "Pacers Pop-Up 5K", date: "Sat, Sep 5", time: "8:00 AM", locationName: "Pacers 14th St", address: "3100 14th St NW, Washington, DC", notes: "Shakeout + shop party", mileage: true, special: true, cancelled: false, hold: false, remind: true }
+];
+
+function splitName(full) {
+  const parts = full.trim().split(/\s+/);
+  return { first: parts[0] || "", last: parts.slice(1).join(" ") || "" };
+}
+
+const SEED = [
+  ["Andre Whitfield", "Flyers", "MAR 2021", 214, 31], ["Simone Baptiste", "Groovers II", "JUN 2024", 18, 5],
+  ["Marcus Tolliver", "Flyers", "SEP 2019", 380, 46], ["Danielle Reyes", "Movers", "FEB 2023", 96, 12],
+  ["Kevin Osei", "Movers", "NOV 2022", 128, 9], ["Tasha Merrick", "Cruisers", "AUG 2026", 1, 1],
+  ["Jordan Pree", "Groovers I", "APR 2025", 44, 7], ["Renee Calloway", "Movers", "JAN 2022", 152, 3],
+  ["Devin Harmon", "Flyers", "MAY 2020", 265, 22], ["Amara Joseph", "Cruisers", "JUL 2026", 4, 2],
+  ["Curtis Lang", "Groovers I", "OCT 2024", 33, 11], ["Nia Fowler", "Groovers II", "MAR 2023", 88, 18],
+  ["Terrell Sims", "Cruisers", "AUG 2026", 2, 2], ["Bianca Adeyemi", "Groovers II", "DEC 2023", 61, 6],
+  ["Omar Kettering", "Flyers", "FEB 2021", 198, 27], ["Lauren Vance", "Movers", "SEP 2025", 27, 4],
+  ["Priya Raghunathan", "Groovers I", "MAY 2024", 52, 8], ["Chris Boateng", "Flyers", "JUL 2022", 141, 15]
+];
+
+// waiver expired for a couple of seed members, to demo the renewal flow
+const EXPIRED_WAIVER_NAMES = ["Curtis Lang", "Lauren Vance"];
+
+const HISTORY = [
+  ["Long Run · Union Market", "Aug 15"], ["Social 5K · Navy Yard", "Aug 13"],
+  ["Speed Work · RFK Track", "Aug 11"], ["Long Run · Anacostia", "Aug 8"]
+];
+
+function code(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const chars = "ACDEFGHJKLMNPQRTUVWXY3456789";
+  let out = "", v = h >>> 0;
+  for (let i = 0; i < 8; i++) { out += chars[v % chars.length]; v = Math.floor(v / chars.length) + 7919; }
+  return out;
+}
+
+const SUPABASE_URL = "https://xuzlcvxtqrimfnfovvqv.supabase.co";
+const SUPABASE_KEY = "sb_publishable_aNo3_b6twiEH9sKoshNXqw_Gq-HasNz";
+let _sb = null;
+function sb() {
+  if (!_sb && window.supabase) _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return _sb;
+}
+
+class Component extends DCLogic {
+  state = {
+    view: "landing",
+    landingMode: "menu",
+    mobilePanel: "runner",
+    profilePanel: "checkins",
+    resendEmail: "",
+    resendErr: "",
+    tab: "pass",
+    form: { firstName: "", lastName: "", email: "", pace: "", dist: "", waiver: false },
+    error: "",
+    myId: null,
+    members: SEED.map((m, i) => {
+      const n = splitName(m[0]);
+      return {
+        id: i + 1, name: m[0], firstName: n.first, lastName: n.last, pace: m[1], dist: DISTANCES[i % 3], joined: m[2], runs: m[3], streak: m[4],
+        photo: null, code: "DRC-" + code(m[0] + m[2]), email: n.first.toLowerCase() + "." + n.last.toLowerCase() + "@example.com",
+        waiverExpired: EXPIRED_WAIVER_NAMES.includes(m[0]), isGuest: false
+      };
+    }),
+    nextId: SEED.length + 1,
+    events: DEFAULT_EVENTS.map(e => Object.assign({}, e)),
+    nextEventNum: 1,
+    eventForm: { name: "", date: "", time: "", locationName: "", address: "", notes: "", mileage: false, special: false, remind: true },
+    editingEventId: null,
+    eventIdx: 2,
+    rsvps: { tue: [3, 5, 9, 15, 18], thu: [2, 4, 7, 11, 12, 16, 17], sat: [1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18], pop: [1, 3, 6, 10, 13] },
+    checkins: { tue: [], thu: [], sat: [1, 3, 4, 9, 15, 12], pop: [] },
+    captainTab: "checkin",
+    query: "",
+    scan: null,
+    kiosk: null,
+    locked: true,
+    kioskLocked: true,
+    pin: "",
+    kpin: "",
+    pinErr: "",
+    role: null,
+    notice: "",
+    guestForm: { name: "" },
+    showGuestForm: false,
+    justSignedUp: false
+  };
+
+  press(which, d) {
+    const key = which === "captain" ? "pin" : "kpin";
+    const adminCode = String(this.props.adminCode ?? "0202");
+    const captainCode = String(this.props.captainCode ?? "1111");
+    this.setState(s => {
+      let v = s[key];
+      if (d === "del") return { [key]: v.slice(0, -1), pinErr: "" };
+      const maxLen = Math.max(adminCode.length, captainCode.length);
+      if (v.length >= maxLen) return null;
+      v = v + d;
+      if (which === "kiosk") {
+        if (v.length < adminCode.length) return { kpin: v, pinErr: "" };
+        return v === adminCode ? { kioskLocked: false, kpin: "", pinErr: "" } : { kpin: "", pinErr: "Wrong passcode. Ask a lead for today's code." };
+      }
+      if (v === adminCode) return { locked: false, role: "admin", pin: "", pinErr: "" };
+      if (v === captainCode) return { locked: false, role: "captain", pin: "", pinErr: "" };
+      if (v.length >= maxLen) return { pin: "", pinErr: "Wrong passcode. Ask a lead for today's code." };
+      return { pin: v, pinErr: "" };
+    });
+  }
+
+  async componentDidMount() {
+    try {
+      const { data, error } = await sb().from("runners").select("*").order("created_at");
+      if (error || !data || !data.length) return;
+      const members = data.map((r, i) => ({
+        id: i + 1, sbId: r.id, name: r.first_name + " " + r.last_name, firstName: r.first_name, lastName: r.last_name,
+        pace: r.pace, dist: r.dist, joined: r.joined_label, runs: r.runs, streak: r.streak, photo: null,
+        code: r.code, email: r.email, waiverExpired: r.waiver_expired, isGuest: r.is_guest, strava: r.strava_url || ""
+      }));
+      const { data: ci } = await sb().from("checkins").select("runner_id,event_id");
+      const checkins = { tue: [], thu: [], sat: [], pop: [] };
+      (ci || []).forEach(row => {
+        const m = members.find(x => x.sbId === row.runner_id);
+        if (m && checkins[row.event_id]) checkins[row.event_id].push(m.id);
+      });
+      const { data: rs } = await sb().from("rsvps").select("runner_id,event_id");
+      const rsvps = { tue: [], thu: [], sat: [], pop: [] };
+      (rs || []).forEach(row => {
+        const m = members.find(x => x.sbId === row.runner_id);
+        if (m) { if (!rsvps[row.event_id]) rsvps[row.event_id] = []; rsvps[row.event_id].push(m.id); }
+      });
+      this.setState(s => ({ members, nextId: members.length + 1, checkins: Object.assign({}, s.checkins, checkins), rsvps: Object.assign({}, s.rsvps, rsvps) }));
+    } catch (e) { /* Supabase unreachable — demo continues on local seed data */ }
+  }
+
+  ev() { return this.state.events[this.state.eventIdx]; }
+  me() { return this.state.members.find(m => m.id === this.state.myId) || null; }
+  set(k, v) { this.setState(s => ({ form: Object.assign({}, s.form, { [k]: v }), error: "" })); }
+
+  createProfile = () => {
+    const f = this.state.form;
+    if (!f.firstName.trim()) return this.setState({ error: "Add your first name so captains can greet you." });
+    if (!f.lastName.trim()) return this.setState({ error: "Add your last name too." });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) return this.setState({ error: "That email doesn't look right." });
+    if (this.state.members.some(m => m.email.toLowerCase() === f.email.trim().toLowerCase())) return this.setState({ error: "An account with that email already exists. Ask a captain to look you up instead." });
+    if (!f.pace) return this.setState({ error: "Pick a pace group. You can change it later." });
+    if ((this.props.requireWaiver ?? true) && !f.waiver) return this.setState({ error: "You'll need to agree to the waiver to run with us." });
+    const id = this.state.nextId;
+    const full = f.firstName.trim() + " " + f.lastName.trim();
+    const m = { id, name: full, firstName: f.firstName.trim(), lastName: f.lastName.trim(), pace: f.pace, dist: DISTANCES[0], joined: "AUG 2026", runs: 0, streak: 0, photo: null, code: "DRC-" + code(full + f.email), email: f.email.trim(), waiverExpired: false, isGuest: false };
+    this.setState(s => ({ members: s.members.concat([m]), myId: id, nextId: id + 1, view: "member", tab: "pass", error: "", justSignedUp: true }));
+    sb().from("runners").insert({
+      first_name: m.firstName, last_name: m.lastName, email: m.email, pace: m.pace, dist: m.dist,
+      code: m.code, joined_label: m.joined, is_guest: false
+    }).select().single().then(({ data, error }) => {
+      if (!error && data) this.setState(s => ({ members: s.members.map(x => x.id === id ? Object.assign({}, x, { sbId: data.id }) : x) }));
+    });
+  };
+
+  renewWaiver = () => this.setState(s => ({ members: s.members.map(m => m.id === s.myId ? Object.assign({}, m, { waiverExpired: false }) : m) }));
+
+  setGuestName = (ev) => this.setState({ guestForm: { name: ev.target.value } });
+  toggleGuestForm = () => this.setState(s => ({ showGuestForm: !s.showGuestForm, guestForm: { name: "" } }));
+
+  addGuestAndCheckIn = () => {
+    const name = this.state.guestForm.name.trim();
+    if (!name) return;
+    const n = splitName(name);
+    const id = this.state.nextId;
+    const m = { id, name, firstName: n.first, lastName: n.last, pace: "Guest", dist: "Guest", joined: "AUG 2026", runs: 0, streak: 0, photo: null, code: "DRC-GUEST-" + id, email: "", waiverExpired: false, isGuest: true };
+    this.setState(s => ({ members: s.members.concat([m]), nextId: id + 1, guestForm: { name: "" }, showGuestForm: false }));
+    setTimeout(() => this.checkIn(id), 0);
+  };
+
+  signOut = () => this.setState({ view: "landing", landingMode: "menu", myId: null, tab: "pass", error: "", form: { firstName: "", lastName: "", email: "", pace: "", dist: "", waiver: false } });
+
+  sendResendEmail = () => {
+    const email = this.state.resendEmail.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return this.setState({ resendErr: "That email doesn't look right." });
+    const m = this.state.members.find(x => x.email.toLowerCase() === email);
+    if (m) return this.setState({ view: "member", myId: m.id, tab: "pass", landingMode: "menu", resendEmail: "", resendErr: "" });
+    sb().from("runners").select("*").ilike("email", email).maybeSingle().then(({ data }) => {
+      if (!data) return this.setState({ resendErr: "No profile with that email yet." });
+      this.setState(s => {
+        const nm = { id: s.nextId, sbId: data.id, name: data.first_name + " " + data.last_name, firstName: data.first_name, lastName: data.last_name, pace: data.pace, dist: data.dist, joined: data.joined_label, runs: data.runs, streak: data.streak, photo: null, code: data.code, email: data.email, waiverExpired: data.waiver_expired, isGuest: data.is_guest, strava: data.strava_url || "" };
+        return { members: s.members.concat([nm]), nextId: s.nextId + 1, view: "member", myId: nm.id, tab: "pass", landingMode: "menu", resendEmail: "", resendErr: "" };
+      });
+    });
+  };
+
+  setEventField(k, v, k2, v2) {
+    this.setState(s => {
+      const next = Object.assign({}, s.eventForm, { [k]: v });
+      if (k2) next[k2] = v2;
+      return { eventForm: next };
+    });
+  }
+
+  newEventForm = () => this.setState({ editingEventId: null, eventForm: { name: "", date: "", time: "", locationName: "", address: "", notes: "", mileage: false, special: false, remind: true } });
+
+  loadEventForm = (ev) => this.setState({
+    editingEventId: ev.id,
+    eventForm: { name: ev.name, date: ev.date, time: ev.time, locationName: ev.locationName, address: ev.address, notes: ev.notes, mileage: ev.mileage, special: ev.special, remind: ev.remind }
+  });
+
+  saveEvent = () => {
+    const f = this.state.eventForm;
+    if (!f.name.trim() || !f.date.trim() || !f.time.trim() || !f.locationName.trim() || !f.address.trim()) return;
+    this.setState(s => {
+      if (s.editingEventId) {
+        return { events: s.events.map(e => e.id === s.editingEventId ? Object.assign({}, e, f) : e), editingEventId: null, eventForm: { name: "", date: "", time: "", locationName: "", address: "", notes: "", mileage: false, special: false, remind: true } };
+      }
+      const id = "ev" + s.nextEventNum;
+      const newEvent = Object.assign({ id, cancelled: false, hold: false }, f);
+      return {
+        events: s.events.concat([newEvent]), nextEventNum: s.nextEventNum + 1,
+        rsvps: Object.assign({}, s.rsvps, { [id]: [] }), checkins: Object.assign({}, s.checkins, { [id]: [] }),
+        eventForm: { name: "", date: "", time: "", locationName: "", address: "", notes: "", mileage: false, special: false, remind: true }
+      };
+    });
+  };
+
+  toggleCancelEvent(id) {
+    this.setState(s => {
+      const ev = s.events.find(e => e.id === id);
+      const goingCancel = !ev.cancelled;
+      const count = (s.rsvps[id] || []).length;
+      return {
+        events: s.events.map(e => e.id === id ? Object.assign({}, e, { cancelled: goingCancel, hold: goingCancel ? false : e.hold }) : e),
+        notice: goingCancel ? "Cancellation emailed + texted to " + count + " RSVP'd runners." : "Reactivation emailed to " + count + " RSVP'd runners."
+      };
+    });
+    clearTimeout(this._n);
+    this._n = setTimeout(() => this.setState({ notice: "" }), 5000);
+  }
+
+  toggleHoldEvent(id) {
+    this.setState(s => {
+      const ev = s.events.find(e => e.id === id);
+      const goingHold = !ev.hold;
+      const count = (s.rsvps[id] || []).length;
+      return {
+        events: s.events.map(e => e.id === id ? Object.assign({}, e, { hold: goingHold }) : e),
+        notice: goingHold ? "Weather hold texted to " + count + " RSVP'd runners." : "Hold lifted — update sent to " + count + " RSVP'd runners."
+      };
+    });
+    clearTimeout(this._n);
+    this._n = setTimeout(() => this.setState({ notice: "" }), 5000);
+  }
+
+  setPhoto = (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const id = this.state.myId;
+    const reader = new FileReader();
+    reader.onload = () => this.setState(s => ({ members: s.members.map(m => m.id === id ? Object.assign({}, m, { photo: reader.result }) : m) }));
+    reader.readAsDataURL(file);
+    ev.target.value = "";
+  };
+
+  initials(name) { return name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase(); }
+
+  checkIn(id) {
+    const e = this.ev().id;
+    this.setState(s => {
+      if (s.checkins[e].includes(id)) return null;
+      const members = s.members.map(m => m.id === id ? Object.assign({}, m, { runs: m.runs + 1 }) : m);
+      return { members, checkins: Object.assign({}, s.checkins, { [e]: s.checkins[e].concat([id]) }) };
+    });
+    const m = this.state.members.find(x => x.id === id);
+    if (m && m.sbId) {
+      sb().from("checkins").insert({ runner_id: m.sbId, event_id: e }).then(() => {});
+      sb().from("runners").update({ runs: m.runs + 1 }).eq("id", m.sbId).then(() => {});
+    }
+  }
+
+  undoCheckIn(id) {
+    const e = this.ev().id;
+    this.setState(s => ({
+      members: s.members.map(m => m.id === id ? Object.assign({}, m, { runs: Math.max(0, m.runs - 1) }) : m),
+      checkins: Object.assign({}, s.checkins, { [e]: s.checkins[e].filter(x => x !== id) })
+    }));
+    const m = this.state.members.find(x => x.id === id);
+    if (m && m.sbId) {
+      sb().from("checkins").delete().eq("runner_id", m.sbId).eq("event_id", e).then(() => {});
+      sb().from("runners").update({ runs: Math.max(0, m.runs - 1) }).eq("id", m.sbId).then(() => {});
+    }
+  }
+
+  toggleRsvp = (eid) => {
+    const id = this.state.myId; if (!id) return;
+    const list = this.state.rsvps[eid] || [];
+    const adding = !list.includes(id);
+    this.setState(s => {
+      const l = s.rsvps[eid] || [];
+      const next = l.includes(id) ? l.filter(x => x !== id) : l.concat([id]);
+      return { rsvps: Object.assign({}, s.rsvps, { [eid]: next }) };
+    });
+    const m = this.state.members.find(x => x.id === id);
+    if (m && m.sbId) {
+      if (adding) sb().from("rsvps").insert({ runner_id: m.sbId, event_id: eid }).then(() => {});
+      else sb().from("rsvps").delete().eq("runner_id", m.sbId).eq("event_id", eid).then(() => {});
+    }
+  };
+
+  updateMyField(field, value) {
+    const id = this.state.myId;
+    this.setState(s => ({ members: s.members.map(m => m.id === id ? Object.assign({}, m, { [field]: value }) : m) }));
+    const m = this.state.members.find(x => x.id === id);
+    if (m && m.sbId) {
+      const col = field === "strava" ? "strava_url" : field;
+      sb().from("runners").update({ [col]: value }).eq("id", m.sbId).then(() => {});
+    }
+  }
+
+  pickTarget() {
+    const e = this.ev().id;
+    const inn = this.state.checkins[e];
+    const mine = this.state.myId;
+    if (mine && !inn.includes(mine)) return this.me();
+    const open = this.state.members.filter(m => !inn.includes(m.id));
+    return open.length ? open[Math.floor(Math.random() * open.length)] : null;
+  }
+
+  simulateScan = () => { const t = this.pickTarget(); if (t) this.setState({ scan: t }); };
+
+  confirmScan = () => {
+    const s = this.state.scan;
+    if (!s) return;
+    this.checkIn(s.id);
+    this.setState({ scan: null });
+  };
+
+  kioskScan = () => {
+    const t = this.pickTarget();
+    if (!t) return;
+    this.checkIn(t.id);
+    this.setState({ kiosk: t.id });
+    clearTimeout(this._k);
+    this._k = setTimeout(() => this.setState({ kiosk: null }), 6000);
+  };
+
+  componentWillUnmount() { clearTimeout(this._k); clearTimeout(this._n); }
+
+  exportCsv = () => {
+    const e = this.ev();
+    const inn = this.state.checkins[e.id];
+    const rows = [["Event", "Date", "Time", "Location", "Address", "Member ID", "First name", "Last name", "Email", "Pace group", "Mileage group", "Member since", "Runs attended", "Waiver expired", "Guest", "RSVP'd", "Checked in"]]
+      .concat(this.state.members.map(m => [e.name, e.date, e.time, e.locationName, e.address, m.code, m.firstName, m.lastName, m.email, m.pace, m.dist, m.joined, m.runs, m.waiverExpired ? "yes" : "no", m.isGuest ? "yes" : "no",
+        (this.state.rsvps[e.id] || []).includes(m.id) ? "yes" : "no", inn.includes(m.id) ? "yes" : "no"]));
+    const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "drc-" + e.id + "-checkins.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  qrEl(seed) {
+    const N = 25, px = 6;
+    let h = 5381;
+    for (let i = 0; i < seed.length; i++) h = ((h * 33) ^ seed.charCodeAt(i)) >>> 0;
+    const rnd = () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; };
+    const finder = (r, c) => {
+      const zones = [[0, 0], [0, N - 7], [N - 7, 0]];
+      for (const [zr, zc] of zones) {
+        if (r >= zr && r < zr + 7 && c >= zc && c < zc + 7) {
+          return Math.max(Math.abs(r - (zr + 3)), Math.abs(c - (zc + 3))) === 1 ? "off" : "on";
+        }
+      }
+      return null;
+    };
+    const rects = [];
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const f = finder(r, c);
+      if (f ? f === "on" : rnd() > 0.48) rects.push(React.createElement("rect", { key: r + "-" + c, x: c * px, y: r * px, width: px, height: px, fill: "#000" }));
+    }
+    return React.createElement("svg", { width: N * px, height: N * px, viewBox: "0 0 " + N * px + " " + N * px, role: "img", "aria-label": "Member pass code" }, rects);
+  }
+
+  renderVals() {
+    const st = this.state, f = st.form;
+    const accent = this.props.accent ?? "#e52240";
+    const perksOn = this.props.perks ?? true;
+    const e = this.ev();
+    const me = this.me();
+    const inn = st.checkins[e.id];
+    const rsvpd = st.rsvps[e.id] || [];
+    const checked = st.members.filter(m => inn.includes(m.id));
+
+    const groupOf = (m) => e.mileage ? m.dist : m.pace;
+    const groupSet = e.mileage ? DISTANCES : PACES;
+    const mswitch = (on) => "flex:1;min-height:44px;padding:0 12px;background:" + (on ? accent : "transparent") + ";color:" + (on ? "#000" : "#fff") + ";border:1px solid " + (on ? accent : "#333") + ";font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;border-radius:2px";
+    const pbtn = (on) => "display:flex;align-items:center;width:100%;min-height:52px;padding:12px 14px;cursor:pointer;border-radius:2px;text-align:left;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:" + (on ? "#1a0a0e" : "#121212") + ";border:1px solid " + (on ? accent : "#2a2a2a") + ";color:#fff";
+    const nav = (on) => "flex:1;min-height:56px;background:transparent;border:none;border-top:3px solid " + (on ? accent : "transparent") + ";color:" + (on ? "#fff" : "#5a5a5a") + ";font-size:11px;font-weight:900;letter-spacing:.16em;cursor:pointer";
+    const tab = (on) => "flex:1;min-height:52px;background:" + (on ? "#111" : "transparent") + ";border:none;border-bottom:3px solid " + (on ? accent : "transparent") + ";color:" + (on ? "#fff" : "#6a6a6a") + ";font-size:12px;font-weight:900;letter-spacing:.18em;cursor:pointer";
+    const perk = (m) => "PACERS-" + code(m.code + e.id).slice(0, 4);
+
+    const q = st.query.trim().toLowerCase();
+    const list = q ? st.members.filter(m => m.name.toLowerCase().includes(q))
+      : st.members.slice().sort((a, b) => {
+          const ai = inn.includes(a.id) ? 1 : 0, bi = inn.includes(b.id) ? 1 : 0;
+          if (ai !== bi) return ai - bi;
+          return (rsvpd.includes(b.id) ? 1 : 0) - (rsvpd.includes(a.id) ? 1 : 0);
+        });
+
+    const paceStats = groupSet.map(name => {
+      const inG = st.members.filter(m => groupOf(m) === name);
+      const c = inG.filter(m => inn.includes(m.id)).length;
+      return { name: name, label: c + " / " + inG.length, barStyle: "height:100%;width:" + (inG.length ? Math.round(c / inG.length * 100) : 0) + "%;background:" + accent + ";transition:width .35s ease" };
+    });
+
+    const kioskM = st.kiosk ? st.members.find(m => m.id === st.kiosk) : null;
+    const milestones = [10, 25, 50, 100];
+    const nextEventForMe = st.events.find(x => (st.rsvps[x.id] || []).includes(st.myId)) || st.events[2] || st.events[0];
+
+    return {
+      isLanding: st.view === "landing",
+      isLandingMenu: st.view === "landing" && st.landingMode === "menu",
+      isLandingResend: st.view === "landing" && st.landingMode === "resend",
+      isLandingGate: st.view === "landing" && st.landingMode === "gate",
+      goLandingMenu: () => this.setState({ landingMode: "menu", view: "landing", resendErr: "" }),
+      goResend: () => this.setState({ landingMode: "resend", resendErr: "" }),
+      goGate: () => this.setState({ landingMode: "gate" }),
+      goSignupFromLanding: () => this.setState({ view: "signup" }),
+      resendEmail: st.resendEmail,
+      resendErr: st.resendErr,
+      setResendEmail: (ev) => this.setState({ resendEmail: ev.target.value, resendErr: "" }),
+      sendResendEmail: this.sendResendEmail,
+      isSignup: st.view === "signup",
+      hasProfile: st.view === "member",
+      isPass: st.view === "member" && st.tab === "pass",
+      isProfile: st.view === "member" && st.tab === "profile",
+      isRuns: st.view === "member" && st.tab === "runs",
+      setMobilePanel: (ev) => this.setState({ mobilePanel: ev.currentTarget.getAttribute("data-panel") }),
+      isMobilePanelRunner: st.mobilePanel === "runner",
+      isMobilePanelCaptain: st.mobilePanel === "captain",
+      isMobilePanelKiosk: st.mobilePanel === "kiosk",
+      mobileSwitchStyle: {
+        runner: mswitch(st.mobilePanel === "runner"),
+        captain: mswitch(st.mobilePanel === "captain"),
+        kiosk: mswitch(st.mobilePanel === "kiosk")
+      },
+      runnerLabel: st.view === "landing" ? "Sign in or sign up" : st.view === "signup" ? "Sign up once" : (st.tab === "pass" ? "Your permanent pass" : st.tab === "profile" ? "Profile + stats" : "RSVP this week"),
+      goPass: () => this.setState({ tab: "pass", justSignedUp: false }),
+      goProfile: () => this.setState({ tab: "profile", justSignedUp: false }),
+      goRuns: () => this.setState({ tab: "runs", justSignedUp: false }),
+      navPassStyle: nav(st.tab === "pass"),
+      navProfileStyle: nav(st.tab === "profile"),
+      navRunsStyle: nav(st.tab === "runs"),
+
+      form: f, error: st.error,
+      setFirstName: ev => this.set("firstName", ev.target.value),
+      setLastName: ev => this.set("lastName", ev.target.value),
+      setEmail: ev => this.set("email", ev.target.value),
+      toggleWaiver: () => this.set("waiver", !f.waiver),
+      createProfile: this.createProfile,
+      signOut: this.signOut,
+      paceOptions: PACES.map(n => ({ name: n, time: PACE_TIMES[n], style: pbtn(f.pace === n), pick: () => this.set("pace", n) })),
+      distOptions: DISTANCES.map(n => ({ name: n, style: pbtn(f.dist === n), pick: () => this.set("dist", n) })),
+      paceEdit: PACES.map(n => ({ name: n, style: pbtn(!!me && me.pace === n), pick: () => me && this.updateMyField("pace", n) })),
+      distEdit: DISTANCES.map(n => ({ name: n, style: pbtn(!!me && me.dist === n), pick: () => me && this.updateMyField("dist", n) })),
+      waiverStyle: "display:flex;gap:12px;align-items:center;width:100%;min-height:56px;padding:12px 14px;cursor:pointer;border-radius:2px;background:#121212;border:1px solid " + (f.waiver ? accent : "#2a2a2a") + ";color:#d4d4d4;text-align:left",
+      waiverBoxStyle: "flex:0 0 22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;background:" + (f.waiver ? accent : "transparent") + ";border:2px solid " + (f.waiver ? accent : "#3a3a3a") + ";color:#000",
+      waiverTick: f.waiver ? "✓" : "",
+
+      waiverExpired: !!(me && me.waiverExpired),
+      renewWaiver: this.renewWaiver,
+      justSignedUp: st.justSignedUp && !!(me && me.email),
+      myEmail: me ? me.email : "",
+      dismissSignupNotice: () => this.setState({ justSignedUp: false }),
+
+      qr: me ? this.qrEl(me.code) : null,
+      myName: me ? me.name : "",
+      myPace: me ? me.pace : "",
+      myDist: me ? me.dist : "",
+      myPhotoStyle: me && me.photo ? "width:100%;height:100%;background-image:url(" + me.photo + ");background-size:cover;background-position:center" : "",
+      hasPhoto: !!(me && me.photo),
+      noPhoto: !!(me && !me.photo),
+      myInitials: me ? this.initials(me.name) : "",
+      photoLabel: me && me.photo ? "CHANGE PHOTO" : "ADD A PHOTO",
+      setPhoto: this.setPhoto,
+      myJoined: me ? me.joined : "",
+      myCode: me ? me.code : "",
+      myRuns: me ? me.runs : 0,
+      myStreak: me ? me.streak : 0,
+      passStatus: me && inn.includes(me.id) ? "ON TODAY'S ROSTER" : "MEMBER PASS",
+      passCardStyle: "background:#0f0f0f;border:1px solid " + (me && inn.includes(me.id) ? accent : "#232323") + ";padding:20px",
+      myCheckedIn: !!(me && inn.includes(me.id)),
+      notCheckedIn: !!(me && !inn.includes(me.id)),
+      checkedInLine: e.name.toUpperCase() + " · " + e.date + " · " + e.time,
+      showPerk: perksOn && !!(me && inn.includes(me.id)),
+      perkCode: kioskM ? perk(kioskM) : (me ? perk(me) : ""),
+      nextRunName: nextEventForMe.name,
+      nextRunMeta: nextEventForMe.date + " · " + nextEventForMe.time + " · " + nextEventForMe.locationName + " · " + nextEventForMe.address,
+      nextRunRsvp: nextEventForMe.cancelled ? "CANCELLED" : ((st.rsvps[nextEventForMe.id] || []).includes(st.myId) ? "YOU'RE RSVP'D" : "NOT RSVP'D YET"),
+      badges: milestones.map(n => {
+        const got = !!me && me.runs >= n;
+        return { n: n, label: "RUNS", style: "flex:1;text-align:center;padding:14px 6px;border:1px solid " + (got ? accent : "#232323") + ";background:" + (got ? "#1a0a0e" : "transparent") + ";color:" + (got ? "#fff" : "#4a4a4a") };
+      }),
+      history: HISTORY.map(h => ({ name: h[0], date: h[1] })),
+      historyPreview: HISTORY.slice(0, 3).map(h => ({ name: h[0], date: h[1] })),
+      nextMilestoneLine: (() => {
+        const runs = me ? me.runs : 0;
+        const next = milestones.find(n => n > runs);
+        return next ? (next - runs) + " more to hit " + next + " runs" : "All milestones earned";
+      })(),
+      guidelines: [
+        "Arrive 10 minutes before start time.",
+        "Waiver must be current — renew it on your pass if it expires.",
+        "Stick with your pace group's route captain.",
+        "No headphones on group routes, for safety."
+      ].map(text => ({ text: text })),
+      isPanelCheckins: st.profilePanel !== "guidelines",
+      isPanelGuidelines: st.profilePanel === "guidelines",
+      goPanelCheckins: () => this.setState({ profilePanel: "checkins" }),
+      goPanelGuidelines: () => this.setState({ profilePanel: "guidelines" }),
+      panelCheckinsStyle: "flex:1;min-height:40px;cursor:pointer;border-radius:2px;font-size:10px;font-weight:800;letter-spacing:.08em;background:" + (st.profilePanel !== "guidelines" ? accent : "#121212") + ";border:1px solid " + (st.profilePanel !== "guidelines" ? accent : "#2a2a2a") + ";color:" + (st.profilePanel !== "guidelines" ? "#000" : "#8a8a8a"),
+      panelGuidelinesStyle: "flex:1;min-height:40px;cursor:pointer;border-radius:2px;font-size:10px;font-weight:800;letter-spacing:.08em;background:" + (st.profilePanel === "guidelines" ? accent : "#121212") + ";border:1px solid " + (st.profilePanel === "guidelines" ? accent : "#2a2a2a") + ";color:" + (st.profilePanel === "guidelines" ? "#000" : "#8a8a8a"),
+      stravaLink: me ? (me.strava || "") : "",
+      setStravaLink: (ev) => { const v = ev.target.value; this.updateMyField("strava", v); },
+      hasStrava: !!(me && me.strava),
+      stravaQr: me && me.strava ? this.qrEl(me.strava) : null,
+
+      runList: st.events.map(x => {
+        const on = (st.rsvps[x.id] || []).includes(st.myId);
+        return {
+          day: x.date + " · " + x.time, name: x.name,
+          meta: x.locationName + " · " + x.address + (x.notes ? " · " + x.notes : ""),
+          rsvpCount: x.cancelled ? "CANCELLED" : (st.rsvps[x.id] || []).length + " going",
+          cardStyle: "border:1px solid " + (x.cancelled ? "#3a1418" : (x.special ? accent : "#232323")) + ";padding:16px 18px;background:" + (x.cancelled ? "#150a0b" : (x.special ? "#140609" : "#0d0d0d")) + ";opacity:" + (x.cancelled ? ".6" : "1"),
+          btnLabel: x.cancelled ? "RUN CANCELLED" : (on ? "YOU'RE IN — TAP TO CANCEL" : "RSVP"),
+          btnStyle: x.cancelled
+            ? "width:100%;min-height:48px;cursor:default;border-radius:2px;font-size:13px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.06em;background:transparent;color:#5a5a5a;border:2px solid #2a2a2a"
+            : "width:100%;min-height:48px;cursor:pointer;border-radius:2px;font-size:13px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:.06em;background:" + (on ? accent : "transparent") + ";color:" + (on ? "#000" : accent) + ";border:2px solid " + accent,
+          toggle: x.cancelled ? () => {} : () => this.toggleRsvp(x.id)
+        };
+      }),
+
+      unlocked: !st.locked,
+      locked: st.locked,
+      isAdmin: st.role === "admin",
+      roleTag: st.role === "admin" ? "ADMIN" : "CAPTAIN",
+      lockIt: () => this.setState({ locked: true, role: null, scan: null, query: "", captainTab: "checkin" }),
+      pinErr: st.pinErr,
+      pinDots: [0, 1, 2, 3].map(i => ({ style: "width:14px;height:14px;border-radius:50%;background:" + (st.pin.length > i ? accent : "transparent") + ";border:2px solid " + (st.pin.length > i ? accent : "#3a3a3a") })),
+      kpinDots: [0, 1, 2, 3].map(i => ({ style: "width:13px;height:13px;border-radius:50%;background:" + (st.kpin.length > i ? accent : "transparent") + ";border:2px solid " + (st.kpin.length > i ? accent : "#3a3a3a") })),
+      keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"].map(k => ({
+        label: k === "del" ? "⌫" : k,
+        style: "min-height:60px;font-size:22px;font-weight:800;border-radius:2px;cursor:" + (k ? "pointer" : "default") + ";background:" + (k ? "#121212" : "transparent") + ";border:1px solid " + (k ? "#232323" : "transparent") + ";color:" + (k ? "#fff" : "transparent"),
+        press: k ? () => this.press("captain", k) : () => {}
+      })),
+      kkeys: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"].map(k => ({
+        label: k === "del" ? "⌫" : k,
+        style: "min-height:42px;font-size:18px;font-weight:800;border-radius:2px;cursor:" + (k ? "pointer" : "default") + ";background:" + (k ? "#121212" : "transparent") + ";border:1px solid " + (k ? "#232323" : "transparent") + ";color:" + (k ? "#fff" : "transparent"),
+        press: k ? () => this.press("kiosk", k) : () => {}
+      })),
+      kioskLocked: st.kioskLocked,
+      kioskUnlocked: !st.kioskLocked,
+      lockKiosk: () => this.setState({ kioskLocked: true, kiosk: null }),
+      codeHint: "Demo codes — admin " + String(this.props.adminCode ?? "0202") + " · captain " + String(this.props.captainCode ?? "1111"),
+      notice: st.notice,
+      hasNotice: !!st.notice,
+
+      eventDay: e.date + " · " + e.time, eventName: e.name,
+      eventCancelled: e.cancelled,
+      eventHold: e.hold,
+      notEventCancelled: !e.cancelled && !e.hold,
+      cycleEvent: () => this.setState(s => ({ eventIdx: (s.eventIdx + 1) % s.events.length, scan: null, query: "" })),
+      captainLabel: st.locked ? "Passcode required" : (st.captainTab === "checkin" ? "Scan or search" : st.captainTab === "dashboard" ? "Live dashboard" : "Manage events"),
+      isCheckInTab: st.captainTab === "checkin",
+      isDashTab: st.captainTab === "dashboard" && st.role === "admin",
+      isEventsTab: st.captainTab === "events" && st.role === "admin",
+      showAdminTabs: st.role === "admin",
+      goCheckIn: () => this.setState({ captainTab: "checkin" }),
+      goDash: () => this.setState({ captainTab: "dashboard" }),
+      goEvents: () => this.setState({ captainTab: "events" }),
+      tabCheckInStyle: tab(st.captainTab === "checkin"),
+      tabDashStyle: tab(st.captainTab === "dashboard"),
+      tabEventsStyle: tab(st.captainTab === "events"),
+
+      eventForm: st.eventForm,
+      setEventName: ev => this.setEventField("name", ev.target.value),
+      setEventDate: ev => this.setEventField("date", ev.target.value),
+      setEventTime: ev => this.setEventField("time", ev.target.value),
+      setEventLocationName: ev => this.setEventField("locationName", ev.target.value),
+      setEventAddress: ev => this.setEventField("address", ev.target.value),
+      setEventNotes: ev => this.setEventField("notes", ev.target.value),
+      setTypeWednesday: () => this.setEventField("mileage", false, "special", false),
+      setTypeSaturday: () => this.setEventField("mileage", true, "special", false),
+      setTypeSpecial: () => this.setEventField("mileage", true, "special", true),
+      toggleEventRemind: () => this.setEventField("remind", !st.eventForm.remind),
+      typeWednesdayStyle: "flex:1;min-height:44px;cursor:pointer;border-radius:2px;font-size:11px;font-weight:800;letter-spacing:.08em;background:" + (!st.eventForm.mileage && !st.eventForm.special ? accent : "#121212") + ";border:1px solid " + (!st.eventForm.mileage && !st.eventForm.special ? accent : "#2a2a2a") + ";color:" + (!st.eventForm.mileage && !st.eventForm.special ? "#000" : "#8a8a8a"),
+      typeSaturdayStyle: "flex:1;min-height:44px;cursor:pointer;border-radius:2px;font-size:11px;font-weight:800;letter-spacing:.08em;background:" + (st.eventForm.mileage && !st.eventForm.special ? accent : "#121212") + ";border:1px solid " + (st.eventForm.mileage && !st.eventForm.special ? accent : "#2a2a2a") + ";color:" + (st.eventForm.mileage && !st.eventForm.special ? "#000" : "#8a8a8a"),
+      typeSpecialStyle: "flex:1;min-height:44px;cursor:pointer;border-radius:2px;font-size:11px;font-weight:800;letter-spacing:.08em;background:" + (st.eventForm.special ? accent : "#121212") + ";border:1px solid " + (st.eventForm.special ? accent : "#2a2a2a") + ";color:" + (st.eventForm.special ? "#000" : "#8a8a8a"),
+      remindToggleStyle: "flex:1;min-height:44px;cursor:pointer;border-radius:2px;font-size:11px;font-weight:800;letter-spacing:.1em;background:" + (st.eventForm.remind ? accent : "#121212") + ";border:1px solid " + (st.eventForm.remind ? accent : "#2a2a2a") + ";color:" + (st.eventForm.remind ? "#000" : "#8a8a8a"),
+      saveEvent: this.saveEvent,
+      newEventForm: this.newEventForm,
+      isEditingEvent: !!st.editingEventId,
+      eventFormTitle: st.editingEventId ? "EDITING · " + (st.events.find(x => x.id === st.editingEventId) || {}).name : "NEW EVENT",
+      saveEventLabel: st.editingEventId ? "Save changes" : "Add event",
+      eventRows: st.events.map(x => ({
+        id: x.id, name: x.name, meta: x.date + " · " + x.time + " · " + x.locationName + (x.remind ? " · reminder on" : ""),
+        rowStyle: "border:1px solid " + (x.cancelled ? "#232323" : x.hold ? "#5a4a1a" : "#232323") + ";padding:14px 16px;opacity:" + (x.cancelled ? ".55" : "1"),
+        edit: () => this.loadEventForm(x),
+        cancelLabel: x.cancelled ? "REACTIVATE" : "CANCEL RUN",
+        cancelStyle: "flex:1;min-height:40px;cursor:pointer;border-radius:2px;font-size:10px;font-weight:900;letter-spacing:.12em;background:transparent;color:" + (x.cancelled ? "#8a8a8a" : accent) + ";border:1px solid " + (x.cancelled ? "#2a2a2a" : accent),
+        toggleCancel: () => this.toggleCancelEvent(x.id),
+        holdLabel: x.hold ? "LIFT HOLD" : "WEATHER HOLD",
+        holdStyle: "flex:1;min-height:40px;cursor:pointer;border-radius:2px;font-size:10px;font-weight:900;letter-spacing:.12em;background:transparent;color:" + (x.hold ? "#e8c34a" : "#8a8a8a") + ";border:1px solid " + (x.hold ? "#e8c34a" : "#2a2a2a"),
+        toggleHold: () => this.toggleHoldEvent(x.id),
+        cancelledTag: x.cancelled ? "CANCELLED" : (x.hold ? "WEATHER HOLD" : "")
+      })),
+
+      scan: st.scan,
+      noScan: !st.scan,
+      scanLabel: st.scan && inn.includes(st.scan.id) ? "ALREADY CHECKED IN" : "MEMBER FOUND",
+      scanMeta: st.scan ? groupOf(st.scan) + " · member since " + st.scan.joined : "",
+      groupHeading: e.mileage ? "BY MILEAGE GROUP" : "BY PACE GROUP",
+      groupLabel: e.mileage ? "MILEAGE GROUP" : "PACE GROUP",
+      scanBadges: st.scan ? [
+        { label: st.scan.runs === 0 ? "FIRST RUN" : st.scan.runs + " RUNS", style: "font-size:11px;font-weight:800;letter-spacing:.1em;padding:6px 10px;background:" + (st.scan.runs === 0 ? accent : "#1e1e1e") + ";color:" + (st.scan.runs === 0 ? "#000" : "#b4b4b4") },
+        { label: rsvpd.includes(st.scan.id) ? "RSVP'D" : "WALK-UP", style: "font-size:11px;font-weight:800;letter-spacing:.1em;padding:6px 10px;background:#1e1e1e;color:#b4b4b4" }
+      ].concat(st.scan.waiverExpired ? [{ label: "WAIVER EXPIRED", style: "font-size:11px;font-weight:800;letter-spacing:.1em;padding:6px 10px;background:#e8c34a;color:#000" }] : []) : [],
+
+      isCaptainRole: st.role === "captain",
+      showGuestForm: st.showGuestForm,
+      toggleGuestForm: this.toggleGuestForm,
+      guestName: st.guestForm.name,
+      guestToggleLabel: st.showGuestForm ? "CANCEL GUEST CHECK-IN" : "+ CHECK IN A GUEST (NO PROFILE)",
+      setGuestName: this.setGuestName,
+      addGuestAndCheckIn: this.addGuestAndCheckIn,
+      confirmLabel: st.scan && inn.includes(st.scan.id) ? "Already in" : "Check in",
+      confirmScan: this.confirmScan,
+      clearScan: () => this.setState({ scan: null }),
+      simulateScan: this.simulateScan,
+
+      query: st.query,
+      setQuery: ev => this.setState({ query: ev.target.value }),
+      filtered: list.slice(0, 40).map(m => {
+        const isIn = inn.includes(m.id);
+        return {
+          name: m.name,
+          meta: groupOf(m) + " · " + m.runs + " runs · " + (rsvpd.includes(m.id) ? "RSVP'd" : "no RSVP"),
+          pill: isIn ? "IN" : "CHECK IN",
+          toggle: () => isIn ? this.undoCheckIn(m.id) : this.checkIn(m.id),
+          rowStyle: "display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:60px;padding:10px 0;background:none;border:none;border-bottom:1px solid #191919;color:#fff;cursor:pointer;opacity:" + (isIn ? ".55" : "1"),
+          pillStyle: "flex:0 0 auto;font-size:11px;font-weight:900;letter-spacing:.1em;padding:8px 12px;background:" + (isIn ? accent : "transparent") + ";color:" + (isIn ? "#000" : accent) + ";border:1px solid " + accent
+        };
+      }),
+      noResults: q.length > 0 && list.length === 0,
+      remainingLabel: Math.max(0, rsvpd.length - checked.filter(m => rsvpd.includes(m.id)).length) + " still out",
+
+      noShows: st.members.filter(m => rsvpd.includes(m.id) && !inn.includes(m.id)).slice(0, 8).map(m => ({ name: m.name })),
+      hasNoShows: st.members.some(m => rsvpd.includes(m.id) && !inn.includes(m.id)),
+      checkedCount: checked.length,
+      rsvpCount: rsvpd.length,
+      barStyle: "height:100%;width:" + (rsvpd.length ? Math.min(100, Math.round(checked.length / rsvpd.length * 100)) : 0) + "%;background:" + accent + ";transition:width .4s ease",
+      turnoutLabel: (rsvpd.length ? Math.round(checked.length / rsvpd.length * 100) : 0) + "% of RSVPs have scanned in",
+      newCount: checked.filter(m => m.runs <= 1).length,
+      walkupCount: checked.filter(m => !rsvpd.includes(m.id)).length,
+      paceStats: paceStats,
+      leaders: st.members.slice().sort((a, b) => b.runs - a.runs).slice(0, 5).map(m => ({ name: m.name, runs: m.runs + " runs" })),
+      exportCsv: this.exportCsv,
+
+      kioskIdle: !kioskM && !st.kioskLocked,
+      kioskDone: !!kioskM && !st.kioskLocked,
+      kioskLabel: st.kioskLocked ? "Locked · admin sets it up" : (kioskM ? "Scanned" : "Idle at the start line"),
+      kioskScan: this.kioskScan,
+      kioskCountLine: checked.length + " checked in · " + e.name,
+      kioskStatus: kioskM && kioskM.runs === 1 ? "FIRST RUN — WELCOME IN" : "CHECKED IN",
+      kioskName: kioskM ? kioskM.name : "",
+      kioskRuns: kioskM ? kioskM.runs : 0,
+      kioskStreak: kioskM ? kioskM.streak : 0,
+      kioskPace: kioskM ? groupOf(kioskM) : "",
+      kioskPhotoStyle: kioskM && kioskM.photo ? "flex:0 0 auto;width:86px;height:86px;border-radius:50%;border:3px solid #000;background-image:url(" + kioskM.photo + ");background-size:cover;background-position:center" : "",
+      kioskHasPhoto: !!(kioskM && kioskM.photo),
+      kioskInitials: kioskM ? this.initials(kioskM.name) : "",
+      kioskPerk: perksOn,
+      kioskMilestone: kioskM ? (milestones.includes(kioskM.runs) ? "That's run number " + kioskM.runs + ". Find a captain for your patch." : "Next milestone at " + (milestones.find(n => n > kioskM.runs) || 250) + " runs.") : "",
+      payload: me ? "DRC1|" + me.code + "|" + me.name + "|" + me.pace + "|" + me.dist + "|sig" : "DRC1|DRC-XXXXXXXX|Name|Movers|Mid Distance|sig"
+    };
+  }
+}
+
+</script>
+</body></html>
