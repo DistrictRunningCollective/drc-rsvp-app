@@ -44,6 +44,7 @@ const SUPABASE_KEY = "sb_publishable_aNo3_b6twiEH9sKoshNXqw_Gq-HasNz";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const PACES = ["Flyers", "Movers", "Groovers I", "Groovers II", "Cruisers"];
+const DISTANCES = ["Long Distance", "Mid Distance", "Short Distance"];
 const MILESTONES = [10, 25, 50, 100];
 const GUIDELINES = [
   "Arrive 10 minutes before start time.",
@@ -151,6 +152,7 @@ function App() {
   const [stravaLink, setStravaLink] = useState("");
   const [photoUploading, setPhotoUploading] = useState(false);
   const [myHistory, setMyHistory] = useState([]);
+  const [editingField, setEditingField] = useState(null); // null | 'pace' | 'dist'
 
   // captain/admin gate — the CODE never lives in this file; we only ever
   // hold the role string the server returned, plus the code the person
@@ -265,6 +267,14 @@ function App() {
       setAllRunners(rs => rs.map(r => r.id === me.id ? { ...r, photo_url } : r));
     }
     setPhotoUploading(false);
+  }
+
+  async function saveField(field, value) {
+    setEditingField(null);
+    if (!me || me[field] === value) return;
+    setMe(m => ({ ...m, [field]: value }));
+    setAllRunners(rs => rs.map(r => r.id === me.id ? { ...r, [field]: value } : r));
+    await sb.from("runners").update({ [field]: value }).eq("id", me.id);
   }
 
   async function saveStravaLink() {
@@ -592,15 +602,46 @@ function App() {
                 <RealQrFallback value={"DRC1:" + me.code} />
               </div>
               <div style={{ display: "flex", gap: 24 }}>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 5 }}>PACE GROUP</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#e52240", letterSpacing: ".08em", textTransform: "uppercase" }}>{me.pace}</div>
+                  <button onClick={() => setEditingField(editingField === "pace" ? null : "pace")} style={{ background: "none", border: "none", padding: 0, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#e52240", letterSpacing: ".08em", textTransform: "uppercase" }}>{me.pace}</span>
+                    <span style={{ fontSize: 11, color: "#6a6a6a" }}>✎</span>
+                  </button>
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 5 }}>SATURDAYS</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#e52240", letterSpacing: ".08em", textTransform: "uppercase" }}>{me.dist}</div>
+                  <button onClick={() => setEditingField(editingField === "dist" ? null : "dist")} style={{ background: "none", border: "none", padding: 0, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#e52240", letterSpacing: ".08em", textTransform: "uppercase" }}>{me.dist}</span>
+                    <span style={{ fontSize: 11, color: "#6a6a6a" }}>✎</span>
+                  </button>
                 </div>
               </div>
+
+              {editingField === "pace" && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 10 }}>CHANGE PACE GROUP</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 12 }}>
+                    {PACES.map(p => (
+                      <button key={p} onClick={() => saveField("pace", p)} style={{ display: "flex", justifyContent: "space-between", minHeight: 42, padding: "0 12px", borderRadius: 4, textAlign: "left", fontSize: 13, fontWeight: 800, textTransform: "uppercase", background: me.pace === p ? "#1a0a0e" : "#121212", border: "1px solid " + (me.pace === p ? "#e52240" : "#2a2a2a"), color: "#fff", alignItems: "center", cursor: "pointer" }}>
+                        <span>{p}</span><span style={{ opacity: .6 }}>{PACE_TIMES[p]}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => setEditingField(null)} style={{ minHeight: 36, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", borderRadius: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", width: "100%" }}>Cancel</button>
+                </div>
+              )}
+              {editingField === "dist" && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 10 }}>CHANGE SATURDAY DISTANCE</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 12 }}>
+                    {DISTANCES.map(d => (
+                      <button key={d} onClick={() => saveField("dist", d)} style={{ display: "flex", minHeight: 42, padding: "0 12px", borderRadius: 4, textAlign: "left", fontSize: 13, fontWeight: 800, textTransform: "uppercase", background: me.dist === d ? "#1a0a0e" : "#121212", border: "1px solid " + (me.dist === d ? "#e52240" : "#2a2a2a"), color: "#fff", alignItems: "center", cursor: "pointer" }}>{d}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setEditingField(null)} style={{ minHeight: 36, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", borderRadius: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer", width: "100%" }}>Cancel</button>
+                </div>
+              )}
               <div style={{ height: 1, background: "#2a2a2a", margin: "18px 0" }} />
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600, color: "#8a8a8a" }}>
                 <span>MEMBER SINCE {me.joined_label}</span>
@@ -736,7 +777,7 @@ function App() {
 
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
           {["pass","profile","runs"].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, minHeight: 56, background: "transparent", border: "none", borderTop: "3px solid " + (tab===t ? "#e52240" : "transparent"), color: tab===t ? "#fff" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
+            <button key={t} onClick={() => { setTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: "transparent", border: "none", borderTop: "3px solid " + (tab===t ? "#e52240" : "transparent"), color: tab===t ? "#fff" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
           ))}
         </div>
       </div>
