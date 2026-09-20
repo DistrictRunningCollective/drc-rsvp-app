@@ -179,7 +179,6 @@ function App() {
   const [kioskGateCode, setKioskGateCode] = useState("");
   const [kioskUnlocked, setKioskUnlocked] = useState(false);
   const [kioskErr, setKioskErr] = useState("");
-  const [kioskScanning, setKioskScanning] = useState(false);
   const [kioskResult, setKioskResult] = useState(null);
 
   async function refreshAll() {
@@ -444,12 +443,6 @@ function App() {
     refreshAll();
   }
 
-  async function submitKioskGate() {
-    setKioskErr("");
-    const { data, error } = await sb.rpc("verify_access_code", { p_code: kioskGateCode });
-    if (error || data !== "admin") { setKioskErr("Wrong passcode. Ask an admin to set it up."); setKioskGateCode(""); return; }
-    setKioskUnlocked(true); setVerifiedCode(kioskGateCode); setRole("admin"); setKioskGateCode("");
-  }
   function kioskHandleScan(text) {
     setKioskScanning(false);
     const m = /^DRC1:(.+)$/.exec(text.trim());
@@ -459,6 +452,20 @@ function App() {
     checkIn(found.id, ev.id);
     setKioskResult({ ...found, runs: found.runs + 1 });
     setTimeout(() => setKioskResult(null), 6000);
+  }
+
+  function exportCsv() {
+    if (!ev) return;
+    const inSet = checkinMap[ev.id] || new Set();
+    const rsvpSet = rsvpMap[ev.id] || new Set();
+    const rows = [["Event", "Date", "First name", "Last name", "Email", "Pace", "RSVP'd", "Checked in"]]
+      .concat(allRunners.map(r => [ev.name, ev.date_label, r.first_name, r.last_name, r.email, r.pace, rsvpSet.has(r.id) ? "yes" : "no", inSet.has(r.id) ? "yes" : "no"]));
+    const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "drc-" + ev.id + "-checkins.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   async function recalcStreaksNow() {
@@ -1082,50 +1089,94 @@ function App() {
 
   if (view === "kiosk") {
     const inSet = ev ? (checkinMap[ev.id] || new Set()) : new Set();
+    const groupLabel = ev && ev.mileage ? "MILEAGE GROUP" : "PACE GROUP";
+
     if (!kioskUnlocked) {
       return (
-        <div className="app-shell" style={{ padding: "40px 22px", justifyContent: "center", gap: 20, alignItems: "center" }}>
-          <button onClick={() => setView("captain")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← Back</button>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 10 }}>KIOSK · ADMIN CODE ONLY</div>
-            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Locked · admin sets it up</h2>
+        <div className="app-shell" style={{ padding: "40px 30px", justifyContent: "center", alignItems: "center", textAlign: "center", gap: 14 }}>
+          <img src={DRC_LOGO} alt="DRC" style={{ width: 36, height: "auto" }} />
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".22em", color: "#e52240", marginBottom: 8 }}>KIOSK LOCKED</div>
+            <div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98 }}>Admin passcode<br/>to start</div>
           </div>
-          <input className="field" type="password" inputMode="numeric" placeholder="Admin passcode" value={kioskGateCode} onChange={e => setKioskGateCode(e.target.value)} style={{ textAlign: "center", fontSize: 20 }} />
-          {kioskErr && <div className="err">{kioskErr}</div>}
-          <button className="btn-primary" onClick={submitKioskGate}>Unlock kiosk</button>
+          <div style={{ display: "flex", gap: 14, justifyContent: "center", margin: "6px 0" }}>
+            {[0,1,2,3].map(i => <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid " + (kioskGateCode.length > i ? "#e52240" : "#3a3a3a"), background: kioskGateCode.length > i ? "#e52240" : "transparent" }} />)}
+          </div>
+          {kioskErr && <div style={{ fontSize: 12, fontWeight: 700, color: "#ff8496" }}>{kioskErr}</div>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, width: 230 }}>
+            {["1","2","3","4","5","6","7","8","9","","0","del"].map((k,i) => (
+              <button key={i} disabled={!k} onClick={() => {
+                if (k === "del") { setKioskGateCode(c => c.slice(0, -1)); setKioskErr(""); return; }
+                const next = kioskGateCode + k;
+                setKioskGateCode(next);
+                if (next.length >= 4) {
+                  sb.rpc("verify_access_code", { p_code: next }).then(({ data }) => {
+                    if (data === "admin") { setKioskUnlocked(true); setVerifiedCode(next); setRole("admin"); setKioskGateCode(""); }
+                    else { setKioskErr("Wrong passcode. Ask an admin to set it up."); setKioskGateCode(""); }
+                  });
+                }
+              }} style={{ minHeight: 54, fontSize: 20, fontWeight: 800, borderRadius: 4, cursor: k ? "pointer" : "default", background: k ? "#121212" : "transparent", border: "1px solid " + (k ? "#232323" : "transparent"), color: "#fff" }}>{k === "del" ? "⌫" : k}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#5a5a5a", letterSpacing: ".08em" }}>Admin code only — captains can't unlock kiosk mode</div>
+          <button onClick={() => setView("captain")} style={{ marginTop: 8, background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← Back</button>
         </div>
       );
     }
-    return (
-      <div className="app-shell" style={{ padding: "20px 18px 40px", alignItems: "center", textAlign: "center" }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#7a7a7a", marginBottom: 20 }}>{kioskResult ? "Scanned" : "Idle at the start line"}</div>
-        {!kioskResult ? (
-          <>
-            {kioskScanning ? (
-              <div style={{ width: "100%" }}><CameraScanner onDetect={kioskHandleScan} onClose={() => setKioskScanning(false)} /></div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#7a7a7a", lineHeight: 1.6 }}>{inSet.size} checked in · {ev ? ev.name : "no event selected"}</div>
-                <button onClick={() => setKioskScanning(true)} style={{ minHeight: 52, padding: "0 28px", background: "transparent", color: "#e52240", border: "2px solid #e52240", fontSize: 14, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", borderRadius: 2 }}>Scan a pass</button>
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ width: "100%" }}>
-            <div style={{ width: 86, height: 86, borderRadius: "50%", border: "3px solid #000", background: kioskResult.photo_url ? "transparent" : "#1a1a1a", margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-              {kioskResult.photo_url ? <img src={kioskResult.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{initials(kioskResult.first_name, kioskResult.last_name)}</span>}
+
+    if (kioskResult) {
+      return (
+        <div className="app-shell" style={{ padding: 0 }}>
+          <div style={{ background: "#e52240", color: "#000", padding: "30px 26px", display: "flex", alignItems: "center", gap: 18 }}>
+            <div style={{ flex: "0 0 auto", width: 66, height: 66, borderRadius: "50%", overflow: "hidden", background: kioskResult.photo_url ? "transparent" : "rgba(0,0,0,.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {kioskResult.photo_url ? <img src={kioskResult.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 22, fontWeight: 900, fontStyle: "italic" }}>{initials(kioskResult.first_name, kioskResult.last_name)}</span>}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".2em", marginBottom: 10, color: "#e52240" }}>{kioskResult.runs === 1 ? "FIRST RUN — WELCOME IN" : "CHECKED IN"}</div>
-            <div style={{ fontSize: 34, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.95, marginBottom: 18 }}>{kioskResult.first_name} {kioskResult.last_name}</div>
-            <div style={{ display: "flex", justifyContent: "center", gap: 28, marginBottom: 18 }}>
-              <div><div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic" }}>{kioskResult.runs}</div><div style={{ fontSize: 9, fontWeight: 800, color: "#8a8a8a", marginTop: 4 }}>RUNS</div></div>
-              <div><div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic" }}>{kioskResult.streak}</div><div style={{ fontSize: 9, fontWeight: 800, color: "#8a8a8a", marginTop: 4 }}>STREAK</div></div>
-              <div><div style={{ fontSize: 15, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>{kioskResult.pace}</div><div style={{ fontSize: 9, fontWeight: 800, color: "#8a8a8a", marginTop: 4 }}>PACE</div></div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".2em", marginBottom: 8 }}>{kioskResult.runs === 1 ? "FIRST RUN — WELCOME IN" : "CHECKED IN"}</div>
+              <div style={{ fontSize: 30, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.92 }}>{kioskResult.first_name} {kioskResult.last_name}</div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#6a6a6a" }}>{(() => { const next = MILESTONES.find(n => n > kioskResult.runs); return next ? "Next milestone at " + next + " runs." : "All milestones earned."; })()}</div>
           </div>
-        )}
-        <button onClick={() => { setKioskUnlocked(false); setVerifiedCode(null); setRole(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#5a5a5a", fontSize: 11, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Lock</button>
+          <div style={{ padding: "26px 26px 40px", display: "flex", flexDirection: "column", gap: 24 }}>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, borderTop: "2px solid #2a2a2a", paddingTop: 12 }}>
+                <div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic", lineHeight: 1 }}>{kioskResult.runs}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".12em", color: "#8a8a8a", marginTop: 6 }}>RUNS</div>
+              </div>
+              <div style={{ flex: 1, borderTop: "2px solid #2a2a2a", paddingTop: 12 }}>
+                <div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic", lineHeight: 1 }}>{kioskResult.streak}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".12em", color: "#8a8a8a", marginTop: 6 }}>WEEK STREAK</div>
+              </div>
+              <div style={{ flex: 1, borderTop: "2px solid #e52240", paddingTop: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, fontStyle: "italic", lineHeight: 1.1, textTransform: "uppercase" }}>{ev && ev.mileage ? kioskResult.dist : kioskResult.pace}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".12em", color: "#8a8a8a", marginTop: 6 }}>{groupLabel}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#6a6a6a", lineHeight: 1.6 }}>{(() => { const next = MILESTONES.find(n => n > kioskResult.runs); return next ? "Next milestone at " + next + " runs." : "All milestones earned."; })()}</div>
+          </div>
+          <button onClick={() => { setKioskUnlocked(false); setVerifiedCode(null); setRole(null); setKioskResult(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 11, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "0 26px 30px", display: "block" }}>Lock</button>
+        </div>
+      );
+    }
+
+    // idle, unlocked
+    return (
+      <div className="app-shell" style={{ padding: "40px 30px", justifyContent: "center", alignItems: "center", textAlign: "center", gap: 26 }}>
+        <img src={DRC_LOGO} alt="DRC" style={{ width: 52, height: "auto" }} />
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".24em", color: "#e52240", marginBottom: 12 }}>{ev ? ev.date_label.toUpperCase() + " · " + ev.name.toUpperCase() : "NO EVENT SELECTED"}</div>
+          {ev && ev.cancelled ? (
+            <div style={{ fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98, color: "#ff8496" }}>This run is<br/>cancelled</div>
+          ) : ev && ev.hold ? (
+            <div style={{ fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98, color: "#f0dc9a" }}>Weather hold —<br/>expect delay</div>
+          ) : (
+            <div style={{ fontSize: 38, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.94 }}>Hold your<br/>pass up</div>
+          )}
+        </div>
+
+        <div style={{ width: 220 }}><CameraScanner onDetect={kioskHandleScan} onClose={() => {}} /></div>
+
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#7a7a7a", lineHeight: 1.6 }}>{inSet.size} checked in · {ev ? ev.name : "—"}</div>
+        <button onClick={() => { setKioskUnlocked(false); setVerifiedCode(null); setRole(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 11, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Lock</button>
       </div>
     );
   }
