@@ -173,6 +173,14 @@ function App() {
   const [newAdminCode, setNewAdminCode] = useState("");
   const [streakMsg, setStreakMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
+  const [eventForm, setEventForm] = useState({ name: "", date_label: "", time_label: "", location_name: "", address: "", notes: "", mileage: false, special: false, remind: true });
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [eventSaveMsg, setEventSaveMsg] = useState("");
+  const [kioskGateCode, setKioskGateCode] = useState("");
+  const [kioskUnlocked, setKioskUnlocked] = useState(false);
+  const [kioskErr, setKioskErr] = useState("");
+  const [kioskScanning, setKioskScanning] = useState(false);
+  const [kioskResult, setKioskResult] = useState(null);
 
   async function refreshAll() {
     const [{ data: ev }, { data: rs }, { data: ci }, { data: runners }] = await Promise.all([
@@ -401,6 +409,56 @@ function App() {
     setSettingsMsg(kind === "captain" ? "Captain code updated." : "Admin code updated. Use it next time you unlock.");
     if (kind === "admin") setVerifiedCode(val);
     setNewCaptainCode(""); setNewAdminCode("");
+  }
+
+  function setEventField(patch) {
+    setEventForm(f => ({ ...f, ...patch }));
+  }
+  function newEventForm() {
+    setEditingEventId(null);
+    setEventForm({ name: "", date_label: "", time_label: "", location_name: "", address: "", notes: "", mileage: false, special: false, remind: true });
+  }
+  function loadEventForm(x) {
+    setEditingEventId(x.id);
+    setEventForm({ name: x.name, date_label: x.date_label, time_label: x.time_label, location_name: x.location_name, address: x.address, notes: x.notes || "", mileage: x.mileage, special: x.special, remind: x.remind });
+  }
+  async function saveEventForm() {
+    setEventSaveMsg("");
+    const id = editingEventId || (eventForm.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) + "-" + Date.now().toString(36));
+    const { error } = await sb.rpc("admin_save_event", {
+      p_code: verifiedCode, p_id: id, p_name: eventForm.name, p_date_label: eventForm.date_label, p_time_label: eventForm.time_label,
+      p_location_name: eventForm.location_name, p_address: eventForm.address, p_notes: eventForm.notes,
+      p_mileage: eventForm.mileage, p_special: eventForm.special, p_remind: eventForm.remind,
+    });
+    if (error) return setEventSaveMsg("Couldn't save — check you're using the current admin code.");
+    await refreshAll();
+    newEventForm();
+    setEventSaveMsg("Saved.");
+  }
+  async function toggleEventCancel(id) {
+    await sb.rpc("admin_toggle_event_flag", { p_code: verifiedCode, p_event_id: id, p_flag: "cancelled" });
+    refreshAll();
+  }
+  async function toggleEventHold(id) {
+    await sb.rpc("admin_toggle_event_flag", { p_code: verifiedCode, p_event_id: id, p_flag: "hold" });
+    refreshAll();
+  }
+
+  async function submitKioskGate() {
+    setKioskErr("");
+    const { data, error } = await sb.rpc("verify_access_code", { p_code: kioskGateCode });
+    if (error || data !== "admin") { setKioskErr("Wrong passcode. Ask an admin to set it up."); setKioskGateCode(""); return; }
+    setKioskUnlocked(true); setVerifiedCode(kioskGateCode); setRole("admin"); setKioskGateCode("");
+  }
+  function kioskHandleScan(text) {
+    setKioskScanning(false);
+    const m = /^DRC1:(.+)$/.exec(text.trim());
+    const code = m ? m[1] : text.trim();
+    const found = allRunners.find(r => r.code === code);
+    if (!found || !ev) return;
+    checkIn(found.id, ev.id);
+    setKioskResult({ ...found, runs: found.runs + 1 });
+    setTimeout(() => setKioskResult(null), 6000);
   }
 
   async function recalcStreaksNow() {
@@ -788,6 +846,20 @@ function App() {
   if (view === "captain") {
     const inSet = ev ? (checkinMap[ev.id] || new Set()) : new Set();
     const rsvpSet = ev ? (rsvpMap[ev.id] || new Set()) : new Set();
+    const checkedCount = inSet.size, rsvpCount = rsvpSet.size;
+    const turnoutPct = rsvpCount ? Math.round(checkedCount / rsvpCount * 100) : 0;
+    const newCount = allRunners.filter(r => inSet.has(r.id) && r.runs <= 1).length;
+    const walkupCount = allRunners.filter(r => inSet.has(r.id) && !rsvpSet.has(r.id)).length;
+    const groupHeading = ev && ev.mileage ? "BY MILEAGE GROUP" : "BY PACE GROUP";
+    const groupNames = ev && ev.mileage ? DISTANCES : PACES;
+    const paceStats = groupNames.map(name => {
+      const key = ev && ev.mileage ? "dist" : "pace";
+      const inG = allRunners.filter(r => r[key] === name);
+      const c = inG.filter(r => inSet.has(r.id)).length;
+      return { name, label: c + " / " + inG.length, pct: inG.length ? Math.round(c / inG.length * 100) : 0 };
+    });
+    const leaders = allRunners.slice().sort((a, b) => b.runs - a.runs).slice(0, 5);
+    const noShows = allRunners.filter(r => rsvpSet.has(r.id) && !inSet.has(r.id)).slice(0, 8);
     return (
       <div className="app-shell" style={{ padding: "20px 18px 40px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
@@ -805,12 +877,14 @@ function App() {
           <button onClick={() => setCaptainTab("checkin")} style={{ flex: 1, minHeight: 46, background: captainTab==="checkin" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="checkin" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>CHECK-IN</button>
           {role === "admin" && <>
             <button onClick={() => setCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="dashboard" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
+            <button onClick={() => setCaptainTab("events")} style={{ flex: 1, minHeight: 46, background: captainTab==="events" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="events" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>EVENTS</button>
             <button onClick={() => setCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="settings" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
           </>}
         </div>
 
         {captainTab === "checkin" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <button onClick={() => { setView("kiosk"); setKioskUnlocked(false); setKioskGateCode(""); setKioskErr(""); setKioskResult(null); }} style={{ background: "none", border: "1px dashed #2a2a2a", color: "#8a8a8a", minHeight: 44, borderRadius: 4, fontSize: 11, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Go to kiosk mode →</button>
             {scanning ? (
               <CameraScanner onDetect={handleScan} onClose={() => setScanning(false)} />
             ) : scanResult ? (
@@ -857,9 +931,118 @@ function App() {
         )}
 
         {captainTab === "dashboard" && (
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: "#8a8a8a", marginBottom: 10 }}>LIVE HEADCOUNT</div>
-            <div style={{ fontSize: 56, fontWeight: 900, fontStyle: "italic", color: "#e52240", marginBottom: 20 }}>{inSet.size} <span style={{ fontSize: 16, color: "#6a6a6a" }}>/ {rsvpSet.size} RSVP'd</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>LIVE HEADCOUNT</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                <span style={{ fontSize: 56, fontWeight: 900, fontStyle: "italic", lineHeight: 0.86, color: "#e52240" }}>{checkedCount}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#6a6a6a" }}>/ {rsvpCount} RSVP'd</span>
+              </div>
+              <div style={{ height: 8, background: "#1a1a1a", marginTop: 14 }}>
+                <div style={{ height: "100%", width: turnoutPct + "%", background: "#e52240", transition: "width .4s ease" }} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#7a7a7a", marginTop: 10 }}>{turnoutPct}% of RSVPs have scanned in</div>
+            </div>
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, background: "#0f0f0f", borderTop: "3px solid #e52240", padding: 16 }}>
+                <div style={{ fontSize: 28, fontWeight: 900, fontStyle: "italic", lineHeight: 1 }}>{newCount}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".12em", color: "#8a8a8a", marginTop: 6 }}>FIRST RUN<br/>TODAY</div>
+              </div>
+              <div style={{ flex: 1, background: "#0f0f0f", borderTop: "3px solid #2a2a2a", padding: 16 }}>
+                <div style={{ fontSize: 28, fontWeight: 900, fontStyle: "italic", lineHeight: 1 }}>{walkupCount}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".12em", color: "#8a8a8a", marginTop: 6 }}>WALK-UPS<br/>NO RSVP</div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>{groupHeading}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {paceStats.map(g => (
+                  <div key={g.name}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                      <span style={{ textTransform: "uppercase", letterSpacing: ".05em" }}>{g.name}</span>
+                      <span style={{ color: "#8a8a8a" }}>{g.label}</span>
+                    </div>
+                    <div style={{ height: 6, background: "#1a1a1a" }}><div style={{ height: "100%", width: g.pct + "%", background: "#e52240", transition: "width .35s ease" }} /></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>MOST RUNS · ALL TIME</div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {leaders.map(s => (
+                  <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #191919" }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{s.first_name} {s.last_name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "#e52240", letterSpacing: ".08em" }}>{s.runs} runs</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {noShows.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>RSVP'D, NOT HERE YET</div>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {noShows.map(r => <div key={r.id} style={{ padding: "8px 0", borderBottom: "1px solid #191919", fontSize: 13, fontWeight: 700, color: "#c4c4c4" }}>{r.first_name} {r.last_name}</div>)}
+                </div>
+              </div>
+            )}
+
+            <button className="btn-ghost" style={{ borderColor: "#e52240", color: "#e52240" }} onClick={exportCsv}>Export check-ins to CSV</button>
+          </div>
+        )}
+
+        {captainTab === "events" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>ALL EVENTS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {events.map(x => (
+                  <div key={x.id} style={{ border: "1px solid #232323", padding: "14px 16px", opacity: x.cancelled ? 0.55 : 1 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, textTransform: "uppercase" }}>{x.name}</span>
+                      {(x.cancelled || x.hold) && <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: ".1em", color: x.cancelled ? "#e52240" : "#e8c34a" }}>{x.cancelled ? "CANCELLED" : "WEATHER HOLD"}</span>}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#8a8a8a", marginBottom: 12 }}>{x.date_label} · {x.time_label} · {x.location_name}{x.remind ? " · reminder on" : ""}</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => loadEventForm(x)} style={{ flex: 1, minHeight: 40, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a" }}>EDIT</button>
+                      <button onClick={() => toggleEventHold(x.id)} style={{ flex: 1, minHeight: 40, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: x.hold ? "#e8c34a" : "#8a8a8a", border: "1px solid " + (x.hold ? "#e8c34a" : "#2a2a2a") }}>{x.hold ? "LIFT HOLD" : "WEATHER HOLD"}</button>
+                      <button onClick={() => toggleEventCancel(x.id)} style={{ flex: 1, minHeight: 40, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: x.cancelled ? "#8a8a8a" : "#e52240", border: "1px solid " + (x.cancelled ? "#2a2a2a" : "#e52240") }}>{x.cancelled ? "REACTIVATE" : "CANCEL RUN"}</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: "#1e1e1e" }} />
+
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a" }}>{editingEventId ? "EDITING · " + eventForm.name : "NEW EVENT"}</div>
+                {editingEventId && <button onClick={newEventForm} style={{ background: "none", border: "none", color: "#e52240", fontSize: 10, fontWeight: 800, letterSpacing: ".1em", cursor: "pointer" }}>+ NEW INSTEAD</button>}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <input className="field" placeholder="Run name" value={eventForm.name} onChange={e => setEventField({ name: e.target.value })} />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input className="field" placeholder="Date, e.g. Sat, Sep 5" value={eventForm.date_label} onChange={e => setEventField({ date_label: e.target.value })} />
+                  <input className="field" placeholder="Time, e.g. 7:00 AM" value={eventForm.time_label} onChange={e => setEventField({ time_label: e.target.value })} />
+                </div>
+                <input className="field" placeholder="Location name" value={eventForm.location_name} onChange={e => setEventField({ location_name: e.target.value })} />
+                <input className="field" placeholder="Street address" value={eventForm.address} onChange={e => setEventField({ address: e.target.value })} />
+                <input className="field" placeholder="Notes, optional" value={eventForm.notes} onChange={e => setEventField({ notes: e.target.value })} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setEventField({ mileage: false, special: false })} style={{ flex: 1, minHeight: 44, cursor: "pointer", borderRadius: 2, fontSize: 11, fontWeight: 800, letterSpacing: ".08em", background: (!eventForm.mileage && !eventForm.special) ? "#e52240" : "#121212", border: "1px solid " + ((!eventForm.mileage && !eventForm.special) ? "#e52240" : "#2a2a2a"), color: (!eventForm.mileage && !eventForm.special) ? "#000" : "#8a8a8a" }}>WEDNESDAY RUN</button>
+                  <button onClick={() => setEventField({ mileage: true, special: false })} style={{ flex: 1, minHeight: 44, cursor: "pointer", borderRadius: 2, fontSize: 11, fontWeight: 800, letterSpacing: ".08em", background: (eventForm.mileage && !eventForm.special) ? "#e52240" : "#121212", border: "1px solid " + ((eventForm.mileage && !eventForm.special) ? "#e52240" : "#2a2a2a"), color: (eventForm.mileage && !eventForm.special) ? "#000" : "#8a8a8a" }}>SATURDAY RUN</button>
+                  <button onClick={() => setEventField({ special: true })} style={{ flex: 1, minHeight: 44, cursor: "pointer", borderRadius: 2, fontSize: 11, fontWeight: 800, letterSpacing: ".08em", background: eventForm.special ? "#e52240" : "#121212", border: "1px solid " + (eventForm.special ? "#e52240" : "#2a2a2a"), color: eventForm.special ? "#000" : "#8a8a8a" }}>SPECIAL EVENT</button>
+                </div>
+                <button onClick={() => setEventField({ remind: !eventForm.remind })} style={{ minHeight: 44, cursor: "pointer", borderRadius: 2, fontSize: 11, fontWeight: 800, letterSpacing: ".1em", background: eventForm.remind ? "#e52240" : "#121212", border: "1px solid " + (eventForm.remind ? "#e52240" : "#2a2a2a"), color: eventForm.remind ? "#000" : "#8a8a8a" }}>REMIND RSVPS</button>
+                <button className="btn-primary" onClick={saveEventForm} style={{ marginTop: 4 }}>{editingEventId ? "Save changes" : "Add event"}</button>
+                {eventSaveMsg && <div className={eventSaveMsg === "Saved." ? "ok" : "err"}>{eventSaveMsg}</div>}
+              </div>
+            </div>
           </div>
         )}
 
@@ -893,6 +1076,56 @@ function App() {
         )}
 
         <button onClick={() => { setView("landing"); setRole(null); setVerifiedCode(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Lock this phone</button>
+      </div>
+    );
+  }
+
+  if (view === "kiosk") {
+    const inSet = ev ? (checkinMap[ev.id] || new Set()) : new Set();
+    if (!kioskUnlocked) {
+      return (
+        <div className="app-shell" style={{ padding: "40px 22px", justifyContent: "center", gap: 20, alignItems: "center" }}>
+          <button onClick={() => setView("captain")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← Back</button>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 10 }}>KIOSK · ADMIN CODE ONLY</div>
+            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Locked · admin sets it up</h2>
+          </div>
+          <input className="field" type="password" inputMode="numeric" placeholder="Admin passcode" value={kioskGateCode} onChange={e => setKioskGateCode(e.target.value)} style={{ textAlign: "center", fontSize: 20 }} />
+          {kioskErr && <div className="err">{kioskErr}</div>}
+          <button className="btn-primary" onClick={submitKioskGate}>Unlock kiosk</button>
+        </div>
+      );
+    }
+    return (
+      <div className="app-shell" style={{ padding: "20px 18px 40px", alignItems: "center", textAlign: "center" }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#7a7a7a", marginBottom: 20 }}>{kioskResult ? "Scanned" : "Idle at the start line"}</div>
+        {!kioskResult ? (
+          <>
+            {kioskScanning ? (
+              <div style={{ width: "100%" }}><CameraScanner onDetect={kioskHandleScan} onClose={() => setKioskScanning(false)} /></div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#7a7a7a", lineHeight: 1.6 }}>{inSet.size} checked in · {ev ? ev.name : "no event selected"}</div>
+                <button onClick={() => setKioskScanning(true)} style={{ minHeight: 52, padding: "0 28px", background: "transparent", color: "#e52240", border: "2px solid #e52240", fontSize: 14, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", letterSpacing: ".06em", cursor: "pointer", borderRadius: 2 }}>Scan a pass</button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ width: "100%" }}>
+            <div style={{ width: 86, height: 86, borderRadius: "50%", border: "3px solid #000", background: kioskResult.photo_url ? "transparent" : "#1a1a1a", margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {kioskResult.photo_url ? <img src={kioskResult.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{initials(kioskResult.first_name, kioskResult.last_name)}</span>}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".2em", marginBottom: 10, color: "#e52240" }}>{kioskResult.runs === 1 ? "FIRST RUN — WELCOME IN" : "CHECKED IN"}</div>
+            <div style={{ fontSize: 34, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.95, marginBottom: 18 }}>{kioskResult.first_name} {kioskResult.last_name}</div>
+            <div style={{ display: "flex", justifyContent: "center", gap: 28, marginBottom: 18 }}>
+              <div><div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic" }}>{kioskResult.runs}</div><div style={{ fontSize: 9, fontWeight: 800, color: "#8a8a8a", marginTop: 4 }}>RUNS</div></div>
+              <div><div style={{ fontSize: 26, fontWeight: 900, fontStyle: "italic" }}>{kioskResult.streak}</div><div style={{ fontSize: 9, fontWeight: 800, color: "#8a8a8a", marginTop: 4 }}>STREAK</div></div>
+              <div><div style={{ fontSize: 15, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>{kioskResult.pace}</div><div style={{ fontSize: 9, fontWeight: 800, color: "#8a8a8a", marginTop: 4 }}>PACE</div></div>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#6a6a6a" }}>{(() => { const next = MILESTONES.find(n => n > kioskResult.runs); return next ? "Next milestone at " + next + " runs." : "All milestones earned."; })()}</div>
+          </div>
+        )}
+        <button onClick={() => { setKioskUnlocked(false); setVerifiedCode(null); setRole(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#5a5a5a", fontSize: 11, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Lock</button>
       </div>
     );
   }
