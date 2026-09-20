@@ -217,6 +217,7 @@ function App() {
             last_name: pending.lastName,
             email: session.user.email,
             pace: pending.pace,
+            dist: "Long Distance",
             code: genCode(full + session.user.email),
             joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
           }).select().single();
@@ -318,6 +319,7 @@ function App() {
       last_name: form.lastName.trim(),
       email: session.user.email,
       pace: form.pace,
+      dist: "Long Distance",
       code: genCode(full + session.user.email),
       joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
     }).select().single();
@@ -561,32 +563,67 @@ function App() {
     return (
       <div className="app-shell" style={{ padding: "24px 20px 90px" }}>
         {tab === "pass" && (
-          <div className="card">
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 14 }}>SCAN AT ANY DRC RUN</div>
-            <div style={{ background: "#fff", padding: 14, display: "flex", justifyContent: "center", marginBottom: 16 }}>
-              <RealQr value={"DRC1:" + me.code} />
-              <RealQrFallback value={"DRC1:" + me.code} />
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
+              <img src={DRC_LOGO} alt="DRC" style={{ width: 30, height: "auto", display: "block" }} />
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : "MEMBER PASS"}</div>
             </div>
-            <div style={{ fontSize: 20, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", marginBottom: 6 }}>{me.first_name} {me.last_name}</div>
-            <div style={{ display: "flex", gap: 20, marginBottom: 14 }}>
-              <div><div style={{ fontSize: 9, fontWeight: 800, color: "#6a6a6a" }}>PACE</div><div style={{ fontSize: 13, fontWeight: 700, color: "#e52240" }}>{me.pace}</div></div>
-              <div><div style={{ fontSize: 9, fontWeight: 800, color: "#6a6a6a" }}>MEMBER SINCE</div><div style={{ fontSize: 13, fontWeight: 700 }}>{me.joined_label}</div></div>
-            </div>
-            <div style={{ fontSize: 12, color: "#8a8a8a", letterSpacing: ".08em" }}>{me.code}</div>
-            {ev && (
-              <div style={{ marginTop: 18, borderTop: "1px solid #232323", paddingTop: 14 }}>
-                {myCheckedIn ? (
-                  <div style={{ background: "#e52240", color: "#000", padding: 12, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Checked in — {ev.name}</div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: "#8a8a8a", marginBottom: 6 }}>NEXT UP</div>
-                    <div style={{ fontWeight: 800 }}>{ev.name} · {ev.date_label} {ev.time_label}</div>
-                    <div style={{ fontSize: 12, color: myRsvp ? "#4ade80" : "#e52240", marginTop: 8 }}>{myRsvp ? "YOU'RE RSVP'D" : "NOT RSVP'D YET"}</div>
-                  </>
-                )}
+            <div className="card">
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+                <label style={{ position: "relative", flex: "0 0 auto", width: 66, height: 66, borderRadius: "50%", overflow: "hidden", cursor: "pointer", background: "#1a1a1a", border: "2px solid #e52240", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {me.photo_url ? (
+                    <img src={me.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <span style={{ fontSize: 22, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{initials(me.first_name, me.last_name)}</span>
+                  )}
+                  <input type="file" accept="image/*" onChange={e => uploadPhoto(e.target.files[0])} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                </label>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 1.03, marginBottom: 6 }}>{me.first_name} {me.last_name}</div>
+                  <label style={{ display: "inline-block", position: "relative", fontSize: 10, fontWeight: 800, letterSpacing: ".16em", color: "#8a8a8a", cursor: "pointer", borderBottom: "1px solid #3a3a3a", paddingBottom: 2 }}>
+                    {photoUploading ? "UPLOADING…" : (me.photo_url ? "CHANGE PHOTO" : "ADD PHOTO")}
+                    <input type="file" accept="image/*" onChange={e => uploadPhoto(e.target.files[0])} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                  </label>
+                </div>
               </div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 14 }}>SCAN AT ANY DRC RUN</div>
+              <div style={{ background: "#fff", padding: 16, display: "flex", justifyContent: "center", marginBottom: 18 }}>
+                <RealQr value={"DRC1:" + me.code} />
+                <RealQrFallback value={"DRC1:" + me.code} />
+              </div>
+              <div style={{ display: "flex", gap: 24 }}>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 5 }}>PACE GROUP</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#e52240", letterSpacing: ".08em", textTransform: "uppercase" }}>{me.pace}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 5 }}>SATURDAYS</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#e52240", letterSpacing: ".08em", textTransform: "uppercase" }}>{me.dist}</div>
+                </div>
+              </div>
+              <div style={{ height: 1, background: "#2a2a2a", margin: "18px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600, color: "#8a8a8a" }}>
+                <span>MEMBER SINCE {me.joined_label}</span>
+                <span style={{ color: "#fff", letterSpacing: ".1em" }}>{me.code}</span>
+              </div>
+            </div>
+            {ev && (
+              myCheckedIn ? (
+                <div style={{ marginTop: 20, background: "#e52240", color: "#000", padding: "18px 20px" }}>
+                  <div style={{ fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 1 }}>Checked in</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, letterSpacing: ".06em" }}>{ev.name.toUpperCase()} · {ev.date_label} · {ev.time_label}</div>
+                </div>
+              ) : (
+                <div style={{ marginTop: 20, border: "1px solid #232323", padding: "18px 20px" }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 8 }}>NEXT UP</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.3 }}>{ev.name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#7a7a7a", marginTop: 6, lineHeight: 1.5 }}>{ev.date_label} · {ev.time_label} · {ev.location_name} · {ev.address}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e52240", marginTop: 12, letterSpacing: ".08em" }}>{ev.cancelled ? "CANCELLED" : (myRsvp ? "YOU'RE RSVP'D" : "NOT RSVP'D YET")}</div>
+                </div>
+              )
             )}
-          </div>
+            <button onClick={signOut} style={{ marginTop: 22, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Not you? Sign out</button>
+          </>
         )}
 
         {tab === "profile" && (
@@ -677,8 +714,8 @@ function App() {
 
         {tab === "runs" && (
           <div>
-            <h2 style={{ margin: "0 0 6px", fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Upcoming runs</h2>
-            <p style={{ margin: "0 0 18px", fontSize: 12, color: "#8a8a8a" }}>RSVP so captains know the headcount.</p>
+            <h2 style={{ margin: "0 0 6px", fontSize: 30, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98 }}>This week</h2>
+            <p style={{ margin: "0 0 22px", fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6 }}>RSVP so captains know the headcount. Your QR still checks you in either way.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {events.map(x => {
                 const on = rsvpMap[x.id]?.has(me.id);
