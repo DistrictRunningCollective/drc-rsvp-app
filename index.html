@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DRC Member Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,500;0,600;0,700;0,800;0,900;1,800&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0a0a; color: #fff; font-family: 'Montserrat', sans-serif; }
+  input, select, button { font-family: inherit; }
+  input:focus-visible, button:focus-visible { outline: 2px solid #e52240; outline-offset: 2px; }
+  input::placeholder { color: #5a5a5a; }
+  button { -webkit-tap-highlight-color: transparent; }
+  .field { width: 100%; background: #121212; border: 1px solid #2a2a2a; color: #fff; font-size: 15px; font-weight: 600; padding: 13px; border-radius: 4px; }
+  .btn-primary { width: 100%; min-height: 52px; background: #e52240; color: #000; border: none; font-size: 15px; font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; border-radius: 4px; }
+  .btn-primary:disabled { opacity: .5; cursor: default; }
+  .btn-ghost { width: 100%; min-height: 48px; background: transparent; color: #fff; border: 1px solid #2a2a2a; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; border-radius: 4px; }
+  .err { background: #2a0b12; border-left: 3px solid #e52240; padding: 10px 14px; font-size: 13px; font-weight: 600; color: #ff8496; border-radius: 2px; }
+  .ok { background: #0f1a10; border-left: 3px solid #4ade80; padding: 10px 14px; font-size: 13px; font-weight: 600; color: #9ee8b0; border-radius: 2px; }
+  .card { background: #0f0f0f; border: 1px solid #232323; padding: 18px; border-radius: 4px; }
+  .app-shell { max-width: 440px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+  .label { font-size: 10px; font-weight: 800; letter-spacing: .18em; color: #8a8a8a; margin-bottom: 8px; display: block; }
+</style>
+</head>
+<body>
+<div id="root">Loading…</div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2" crossorigin></script>
+<script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js" crossorigin></script>
+<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js" crossorigin></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+// Publishable (anon) key only — NEVER put the secret key here.
+const SUPABASE_URL = "https://rghmrznhoqioldpllunt.supabase.co";
+const SUPABASE_KEY = "sb_publishable_aNo3_b6twiEH9sKoshNXqw_Gq-HasNz";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const PACES = ["Flyers", "Movers", "Groovers I", "Groovers II", "Cruisers"];
+const PACE_TIMES = { "Flyers": "Sub 7:00/mi", "Movers": "7:00–8:00/mi", "Groovers I": "8:00–9:00/mi", "Groovers II": "9:00–10:00/mi", "Cruisers": "10:00+/mi" };
+
+function isEmail(v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v); }
+function genCode(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const chars = "ACDEFGHJKLMNPQRTUVWXY3456789";
+  let out = "", v = h >>> 0;
+  for (let i = 0; i < 8; i++) { out += chars[v % chars.length]; v = Math.floor(v / chars.length) + 7919; }
+  return "DRC-" + out;
+}
+
+// ── Real scannable QR (encodes "DRC1:<code>") ─────────────
+function RealQr({ value, size = 180 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) QRCode.toCanvas(ref.current, value, { width: size, margin: 1, color: { dark: "#000000", light: "#ffffff" } });
+  }, [value, size]);
+  return <canvas ref={ref} width={size} height={size} style={{ display: "block" }} />;
+}
+
+// ── Camera-based QR scanner (decodes via jsQR) ────────────
+function CameraScanner({ onDetect, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [scanErr, setScanErr] = useState("");
+
+  useEffect(() => {
+    let stream, raf, stopped = false;
+    async function start() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        tick();
+      } catch (e) {
+        setScanErr("Camera unavailable. Check permissions, and that you're on HTTPS.");
+      }
+    }
+    function tick() {
+      if (stopped) return;
+      const v = videoRef.current, c = canvasRef.current;
+      if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(v, 0, 0, c.width, c.height);
+        const img = ctx.getImageData(0, 0, c.width, c.height);
+        const result = jsQR(img.data, img.width, img.height);
+        if (result && result.data) { onDetect(result.data); return; }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    start();
+    return () => { stopped = true; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach(t => t.stop()); };
+  }, [onDetect]);
+
+  return (
+    <div style={{ position: "relative", aspectRatio: "1", background: "#000", borderRadius: 4, overflow: "hidden" }}>
+      <video ref={videoRef} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <canvas ref={canvasRef} style={{ display: "none" }} />
+      {scanErr && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, textAlign: "center", fontSize: 13, color: "#ff8496", background: "rgba(0,0,0,.85)" }}>{scanErr}</div>}
+      <button onClick={onClose} style={{ position: "absolute", top: 10, right: 10, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,.6)", border: "none", color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
+    </div>
+  );
+}
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [me, setMe] = useState(null);
+  const [view, setView] = useState("landing");
+  const [tab, setTab] = useState("pass");
+
+  const [authEmail, setAuthEmail] = useState("");
+  const [authSent, setAuthSent] = useState(false);
+  const [authErr, setAuthErr] = useState("");
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [form, setForm] = useState({ firstName: "", lastName: "", pace: "", waiver: false });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [events, setEvents] = useState([]);
+  const [rsvpMap, setRsvpMap] = useState({});
+  const [checkinMap, setCheckinMap] = useState({});
+  const [allRunners, setAllRunners] = useState([]);
+  const [eventIdx, setEventIdx] = useState(0);
+
+  // captain/admin gate — the CODE never lives in this file; we only ever
+  // hold the role string the server returned, plus the code the person
+  // typed (kept in memory only, re-verified server-side on every action).
+  const [gateCode, setGateCode] = useState("");
+  const [role, setRole] = useState(null);        // 'captain' | 'admin' | null
+  const [verifiedCode, setVerifiedCode] = useState(null);
+  const [pinErr, setPinErr] = useState("");
+  const [captainTab, setCaptainTab] = useState("checkin");
+  const [query, setQuery] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [scanMsg, setScanMsg] = useState("");
+  const [showGuestForm, setShowGuestForm] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [settingsMsg, setSettingsMsg] = useState("");
+  const [newCaptainCode, setNewCaptainCode] = useState("");
+  const [newAdminCode, setNewAdminCode] = useState("");
+  const [streakMsg, setStreakMsg] = useState("");
+  const [recalculating, setRecalculating] = useState(false);
+
+  async function refreshAll() {
+    const [{ data: ev }, { data: rs }, { data: ci }, { data: runners }] = await Promise.all([
+      sb.from("events").select("*").order("created_at"),
+      sb.from("rsvps").select("runner_id,event_id"),
+      sb.from("checkins").select("runner_id,event_id"),
+      sb.from("runners").select("*").order("created_at"),
+    ]);
+    setEvents(ev || []);
+    const rMap = {}; (rs || []).forEach(r => { (rMap[r.event_id] ||= new Set()).add(r.runner_id); });
+    setRsvpMap(rMap);
+    const cMap = {}; (ci || []).forEach(r => { (cMap[r.event_id] ||= new Set()).add(r.runner_id); });
+    setCheckinMap(cMap);
+    setAllRunners(runners || []);
+    return runners || [];
+  }
+
+  useEffect(() => {
+    refreshAll();
+    sb.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) { setMe(null); return; }
+    (async () => {
+      const runners = await refreshAll();
+      const mine = runners.find(r => r.auth_user_id === session.user.id);
+      if (mine) { setMe(mine); setView("member"); setTab("pass"); }
+      else { setNeedsProfile(true); setView("completeProfile"); }
+    })();
+  }, [session]);
+
+  const ev = events[eventIdx] || null;
+
+  // ── Auth ─────────────────────────────────────────────────
+  async function sendMagicLink() {
+    setAuthErr("");
+    if (!isEmail(authEmail)) return setAuthErr("That email doesn't look right.");
+    setLoading(true);
+    const { error } = await sb.auth.signInWithOtp({ email: authEmail.trim().toLowerCase(), options: { emailRedirectTo: window.location.origin } });
+    setLoading(false);
+    if (error) return setAuthErr("Couldn't send the link. Try again in a minute.");
+    setAuthSent(true);
+  }
+
+  async function completeProfile() {
+    setError("");
+    if (!form.firstName.trim()) return setError("Add your first name.");
+    if (!form.lastName.trim()) return setError("Add your last name too.");
+    if (!form.pace) return setError("Pick a pace group.");
+    if (!form.waiver) return setError("You'll need to agree to the waiver to run with us.");
+    setLoading(true);
+    const full = form.firstName.trim() + " " + form.lastName.trim();
+    const { data, error } = await sb.from("runners").insert({
+      auth_user_id: session.user.id,
+      first_name: form.firstName.trim(),
+      last_name: form.lastName.trim(),
+      email: session.user.email,
+      pace: form.pace,
+      code: genCode(full + session.user.email),
+      joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
+    }).select().single();
+    setLoading(false);
+    if (error) return setError("Something went wrong creating your pass. Try again.");
+    setMe(data);
+    setAllRunners(r => r.concat([data]));
+    setView("member"); setTab("pass"); setNeedsProfile(false);
+  }
+
+  async function signOut() {
+    await sb.auth.signOut();
+    setMe(null); setSession(null); setView("landing"); setAuthSent(false); setAuthEmail("");
+  }
+
+  // ── Captain / admin gate ──────────────────────────────────
+  async function submitGateCode() {
+    setPinErr("");
+    const { data, error } = await sb.rpc("verify_access_code", { p_code: gateCode });
+    if (error || !data) { setPinErr("Wrong passcode. Ask a lead for today's code."); setGateCode(""); return; }
+    setRole(data); setVerifiedCode(gateCode); setView("captain"); setGateCode("");
+  }
+
+  async function checkIn(runnerId, eventId) {
+    setCheckinMap(m => { const s = new Set(m[eventId] || []); s.add(runnerId); return { ...m, [eventId]: s }; });
+    setAllRunners(rs => rs.map(r => r.id === runnerId ? { ...r, runs: r.runs + 1 } : r));
+    const { error } = await sb.rpc("captain_check_in", { p_code: verifiedCode, p_runner_id: runnerId, p_event_id: eventId });
+    if (error) refreshAll();
+  }
+  async function undoCheckIn(runnerId, eventId) {
+    setCheckinMap(m => { const s = new Set(m[eventId] || []); s.delete(runnerId); return { ...m, [eventId]: s }; });
+    await sb.rpc("captain_undo_check_in", { p_code: verifiedCode, p_runner_id: runnerId, p_event_id: eventId });
+  }
+  async function addGuestAndCheckIn() {
+    const name = guestName.trim();
+    if (!name || !ev) return;
+    const { data: newId, error } = await sb.rpc("captain_add_guest", { p_code: verifiedCode, p_name: name });
+    if (error) return;
+    await refreshAll();
+    setGuestName(""); setShowGuestForm(false);
+    checkIn(newId, ev.id);
+  }
+  async function toggleRsvp(eventId) {
+    if (!me) return;
+    const has = rsvpMap[eventId]?.has(me.id);
+    setRsvpMap(m => { const s = new Set(m[eventId] || []); has ? s.delete(me.id) : s.add(me.id); return { ...m, [eventId]: s }; });
+    if (has) await sb.from("rsvps").delete().eq("runner_id", me.id).eq("event_id", eventId);
+    else await sb.from("rsvps").insert({ runner_id: me.id, event_id: eventId });
+  }
+
+  function handleScan(text) {
+    setScanning(false);
+    const m = /^DRC1:(.+)$/.exec(text.trim());
+    const code = m ? m[1] : text.trim();
+    const found = allRunners.find(r => r.code === code);
+    if (!found) { setScanMsg("No member matches that code."); return; }
+    setScanResult(found); setScanMsg("");
+  }
+  function confirmScan() {
+    if (scanResult && ev) checkIn(scanResult.id, ev.id);
+    setScanResult(null);
+  }
+
+  async function saveAccessCode(kind) {
+    const val = kind === "captain" ? newCaptainCode : newAdminCode;
+    if (!val || val.length < 4) return setSettingsMsg("Code must be at least 4 characters.");
+    const { error } = await sb.rpc("admin_set_access_code", { p_code: verifiedCode, p_kind: kind, p_new_code: val });
+    if (error) return setSettingsMsg("Couldn't update — check you're using the current admin code.");
+    setSettingsMsg(kind === "captain" ? "Captain code updated." : "Admin code updated. Use it next time you unlock.");
+    if (kind === "admin") setVerifiedCode(val);
+    setNewCaptainCode(""); setNewAdminCode("");
+  }
+
+  async function recalcStreaksNow() {
+    setRecalculating(true); setStreakMsg("");
+    const { error } = await sb.rpc("admin_recalculate_streaks", { p_code: verifiedCode });
+    setRecalculating(false);
+    if (error) return setStreakMsg("Couldn't recalculate — check you're using the current admin code.");
+    await refreshAll();
+    setStreakMsg("Streaks recalculated from check-in history.");
+  }
+
+  const filteredRunners = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allRunners;
+    return allRunners.filter(r => (r.first_name + " " + r.last_name).toLowerCase().includes(q));
+  }, [query, allRunners]);
+
+  // ── Landing ──────────────────────────────────────────────
+  if (view === "landing" && !session) {
+    return (
+      <div className="app-shell" style={{ padding: "40px 22px", justifyContent: "center", gap: 24 }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 10 }}>DISTRICT RUNNING COLLECTIVE</div>
+          <h1 style={{ margin: "0 0 8px", fontSize: 34, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96 }}>One code, every run</h1>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6 }}>Sign in with your email — we'll send a link, no password needed.</p>
+        </div>
+
+        {!authSent ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <input className="field" type="email" placeholder="you@email.com" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
+            {authErr && <div className="err">{authErr}</div>}
+            <button className="btn-primary" disabled={loading} onClick={sendMagicLink}>{loading ? "Sending…" : "Email me a sign-in link"}</button>
+            <div style={{ height: 1, background: "#1e1e1e", margin: "6px 0" }} />
+            <button className="btn-ghost" style={{ color: "#e52240", borderColor: "#e52240" }} onClick={() => setView("gate")}>Captain / Admin</button>
+          </div>
+        ) : (
+          <div className="ok">Check your email for a sign-in link — it'll bring you right back here.</div>
+        )}
+      </div>
+    );
+  }
+
+  if (view === "gate") {
+    return (
+      <div className="app-shell" style={{ padding: "40px 22px", justifyContent: "center", gap: 20, alignItems: "center" }}>
+        <button onClick={() => setView("landing")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← Back</button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 10 }}>CAPTAINS + ADMINS ONLY</div>
+          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Enter passcode</h2>
+        </div>
+        <input className="field" type="password" inputMode="numeric" placeholder="Passcode" value={gateCode} onChange={e => setGateCode(e.target.value)} style={{ textAlign: "center", fontSize: 20 }} />
+        {pinErr && <div className="err">{pinErr}</div>}
+        <button className="btn-primary" onClick={submitGateCode}>Unlock</button>
+      </div>
+    );
+  }
+
+  // ── Complete profile (first sign-in after clicking magic link) ──
+  if (view === "completeProfile" && needsProfile) {
+    return (
+      <div className="app-shell" style={{ padding: "28px 22px 40px" }}>
+        <h2 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Make your pass</h2>
+        <p style={{ margin: "0 0 22px", fontSize: 13, fontWeight: 600, color: "#8a8a8a" }}>You're signed in as {session.user.email}. Just need a few details.</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label className="label">FIRST NAME</label>
+              <input className="field" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="label">LAST NAME</label>
+              <input className="field" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="label">PACE GROUP</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {PACES.map(p => (
+                <button key={p} onClick={() => setForm(f => ({ ...f, pace: p }))} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 48, padding: "0 14px", cursor: "pointer", borderRadius: 4, textAlign: "left", fontSize: 14, fontWeight: 800, textTransform: "uppercase", background: form.pace === p ? "#1a0a0e" : "#121212", border: "1px solid " + (form.pace === p ? "#e52240" : "#2a2a2a"), color: "#fff", alignItems: "center" }}>
+                  <span>{p}</span><span style={{ opacity: .7 }}>{PACE_TIMES[p]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => setForm(f => ({ ...f, waiver: !f.waiver }))} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 52, padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (form.waiver ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left" }}>
+            <span style={{ flex: "0 0 22px", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, background: form.waiver ? "#e52240" : "transparent", border: "2px solid " + (form.waiver ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.waiver ? "✓" : ""}</span>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>I agree to the waiver, terms and Code of Conduct</span>
+          </button>
+          {error && <div className="err">{error}</div>}
+          <button className="btn-primary" disabled={loading} onClick={completeProfile}>{loading ? "Creating…" : "Create my pass"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Member ───────────────────────────────────────────────
+  if (view === "member" && me) {
+    const myRsvp = ev && rsvpMap[ev.id]?.has(me.id);
+    const myCheckedIn = ev && checkinMap[ev.id]?.has(me.id);
+    return (
+      <div className="app-shell" style={{ padding: "24px 20px 90px" }}>
+        {tab === "pass" && (
+          <div className="card">
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 14 }}>SCAN AT ANY DRC RUN</div>
+            <div style={{ background: "#fff", padding: 14, display: "flex", justifyContent: "center", marginBottom: 16 }}>
+              <RealQr value={"DRC1:" + me.code} />
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", marginBottom: 6 }}>{me.first_name} {me.last_name}</div>
+            <div style={{ display: "flex", gap: 20, marginBottom: 14 }}>
+              <div><div style={{ fontSize: 9, fontWeight: 800, color: "#6a6a6a" }}>PACE</div><div style={{ fontSize: 13, fontWeight: 700, color: "#e52240" }}>{me.pace}</div></div>
+              <div><div style={{ fontSize: 9, fontWeight: 800, color: "#6a6a6a" }}>MEMBER SINCE</div><div style={{ fontSize: 13, fontWeight: 700 }}>{me.joined_label}</div></div>
+            </div>
+            <div style={{ fontSize: 12, color: "#8a8a8a", letterSpacing: ".08em" }}>{me.code}</div>
+            {ev && (
+              <div style={{ marginTop: 18, borderTop: "1px solid #232323", paddingTop: 14 }}>
+                {myCheckedIn ? (
+                  <div style={{ background: "#e52240", color: "#000", padding: 12, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Checked in — {ev.name}</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: "#8a8a8a", marginBottom: 6 }}>NEXT UP</div>
+                    <div style={{ fontWeight: 800 }}>{ev.name} · {ev.date_label} {ev.time_label}</div>
+                    <div style={{ fontSize: 12, color: myRsvp ? "#4ade80" : "#e52240", marginTop: 8 }}>{myRsvp ? "YOU'RE RSVP'D" : "NOT RSVP'D YET"}</div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "profile" && (
+          <div>
+            <h2 style={{ margin: "0 0 18px", fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>{me.first_name} {me.last_name}</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+              <div style={{ background: "#0f0f0f", borderTop: "3px solid #e52240", padding: 16 }}>
+                <div style={{ fontSize: 40, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{me.runs}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#8a8a8a", marginTop: 8 }}>RUNS ATTENDED</div>
+              </div>
+              <div style={{ background: "#0f0f0f", borderTop: "3px solid #2a2a2a", padding: 16 }}>
+                <div style={{ fontSize: 40, fontWeight: 900, fontStyle: "italic" }}>{me.streak}</div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#8a8a8a", marginTop: 8 }}>WEEK STREAK</div>
+              </div>
+            </div>
+            <button className="btn-ghost" onClick={signOut} style={{ marginTop: 10 }}>Sign out</button>
+          </div>
+        )}
+
+        {tab === "runs" && (
+          <div>
+            <h2 style={{ margin: "0 0 6px", fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Upcoming runs</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 12, color: "#8a8a8a" }}>RSVP so captains know the headcount.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {events.map(x => {
+                const on = rsvpMap[x.id]?.has(me.id);
+                return (
+                  <div key={x.id} className="card" style={{ opacity: x.cancelled ? 0.5 : 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240", letterSpacing: ".1em" }}>{x.date_label} · {x.time_label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", margin: "6px 0" }}>{x.name}</div>
+                    <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 12 }}>{x.location_name} · {x.address}</div>
+                    <button className="btn-ghost" disabled={x.cancelled} onClick={() => toggleRsvp(x.id)} style={{ background: on ? "#e52240" : "transparent", color: on ? "#000" : "#e52240", borderColor: "#e52240" }}>
+                      {x.cancelled ? "CANCELLED" : (on ? "YOU'RE IN — TAP TO CANCEL" : "RSVP")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
+          {["pass","profile","runs"].map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, minHeight: 56, background: "transparent", border: "none", borderTop: "3px solid " + (tab===t ? "#e52240" : "transparent"), color: tab===t ? "#fff" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Captain / Admin ───────────────────────────────────────
+  if (view === "captain") {
+    const inSet = ev ? (checkinMap[ev.id] || new Set()) : new Set();
+    const rsvpSet = ev ? (rsvpMap[ev.id] || new Set()) : new Set();
+    return (
+      <div className="app-shell" style={{ padding: "20px 18px 40px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <button onClick={() => setEventIdx(i => (i+1) % Math.max(events.length,1))} style={{ background: "none", border: "none", color: "#fff", textAlign: "left", cursor: "pointer" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240" }}>{ev ? ev.date_label : "—"} ⌄</div>
+            <div style={{ fontSize: 17, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>{ev ? ev.name : "No events yet"}</div>
+          </button>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 24, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{inSet.size}</div>
+            <div style={{ fontSize: 10, color: "#8a8a8a" }}>OF {rsvpSet.size} RSVP</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", borderTop: "1px solid #1e1e1e", borderBottom: "1px solid #1e1e1e", marginBottom: 16 }}>
+          <button onClick={() => setCaptainTab("checkin")} style={{ flex: 1, minHeight: 46, background: captainTab==="checkin" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="checkin" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>CHECK-IN</button>
+          {role === "admin" && <>
+            <button onClick={() => setCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="dashboard" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
+            <button onClick={() => setCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#111" : "transparent", border: "none", borderBottom: "3px solid " + (captainTab==="settings" ? "#e52240" : "transparent"), color: "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
+          </>}
+        </div>
+
+        {captainTab === "checkin" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {scanning ? (
+              <CameraScanner onDetect={handleScan} onClose={() => setScanning(false)} />
+            ) : scanResult ? (
+              <div className="card" style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240", marginBottom: 8 }}>MEMBER FOUND</div>
+                <div style={{ fontSize: 22, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", marginBottom: 6 }}>{scanResult.first_name} {scanResult.last_name}</div>
+                <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 14 }}>{scanResult.pace} · {scanResult.runs} runs</div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn-primary" onClick={confirmScan}>Check in</button>
+                  <button className="btn-ghost" style={{ flex: "0 0 60px" }} onClick={() => setScanResult(null)}>✕</button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn-primary" onClick={() => { setScanMsg(""); setScanning(true); }}>Scan a pass</button>
+            )}
+            {scanMsg && <div className="err">{scanMsg}</div>}
+
+            <div>
+              <button className="btn-ghost" onClick={() => setShowGuestForm(s => !s)} style={{ borderStyle: "dashed", color: "#8a8a8a" }}>{showGuestForm ? "CANCEL GUEST CHECK-IN" : "+ CHECK IN A GUEST (NO PASS)"}</button>
+              {showGuestForm && (
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <input className="field" placeholder="Guest's name" value={guestName} onChange={e => setGuestName(e.target.value)} />
+                  <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={addGuestAndCheckIn}>Add</button>
+                </div>
+              )}
+            </div>
+
+            <input className="field" type="search" placeholder="Search all members" value={query} onChange={e => setQuery(e.target.value)} />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {filteredRunners.slice(0, 40).map(r => {
+                const isIn = inSet.has(r.id);
+                return (
+                  <button key={r.id} onClick={() => ev && (isIn ? undoCheckIn(r.id, ev.id) : checkIn(r.id, ev.id))} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 56, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #191919", color: "#fff", cursor: "pointer", opacity: isIn ? 0.55 : 1 }}>
+                    <span style={{ textAlign: "left" }}>
+                      <div style={{ fontSize: 15, fontWeight: 800 }}>{r.first_name} {r.last_name}</div>
+                      <div style={{ fontSize: 11, color: "#7a7a7a" }}>{r.pace} · {r.runs} runs</div>
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 900, padding: "6px 10px", alignSelf: "center", background: isIn ? "#e52240" : "transparent", color: isIn ? "#000" : "#e52240", border: "1px solid #e52240" }}>{isIn ? "IN" : "CHECK IN"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {captainTab === "dashboard" && (
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#8a8a8a", marginBottom: 10 }}>LIVE HEADCOUNT</div>
+            <div style={{ fontSize: 56, fontWeight: 900, fontStyle: "italic", color: "#e52240", marginBottom: 20 }}>{inSet.size} <span style={{ fontSize: 16, color: "#6a6a6a" }}>/ {rsvpSet.size} RSVP'd</span></div>
+          </div>
+        )}
+
+        {captainTab === "settings" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.6 }}>Changing a code takes effect immediately — everyone using the old code will need the new one.</div>
+            <div>
+              <label className="label">NEW CAPTAIN CODE</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="field" value={newCaptainCode} onChange={e => setNewCaptainCode(e.target.value)} />
+                <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={() => saveAccessCode("captain")}>Save</button>
+              </div>
+            </div>
+            <div>
+              <label className="label">NEW ADMIN CODE</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="field" value={newAdminCode} onChange={e => setNewAdminCode(e.target.value)} />
+                <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={() => saveAccessCode("admin")}>Save</button>
+              </div>
+            </div>
+            {settingsMsg && <div className={settingsMsg.includes("update") ? "ok" : "err"}>{settingsMsg}</div>}
+
+            <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
+            <div>
+              <div className="label">RUN STREAKS</div>
+              <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 10 }}>Recalculated automatically every Monday from check-in history. Run it manually if you want to see it update right now.</div>
+              <button className="btn-ghost" disabled={recalculating} onClick={recalcStreaksNow}>{recalculating ? "Recalculating…" : "Recalculate streaks now"}</button>
+              {streakMsg && <div className={streakMsg.includes("recalculated") ? "ok" : "err"} style={{ marginTop: 10 }}>{streakMsg}</div>}
+            </div>
+          </div>
+        )}
+
+        <button onClick={() => { setView("landing"); setRole(null); setVerifiedCode(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Lock this phone</button>
+      </div>
+    );
+  }
+
+  return <div>Loading…</div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
