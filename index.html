@@ -33,7 +33,6 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2" crossorigin></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.js" crossorigin></script>
 <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js" crossorigin></script>
 
 <script type="text/babel" data-presets="react">
@@ -41,7 +40,7 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 // Publishable (anon) key only — NEVER put the secret key here.
 const SUPABASE_URL = "https://rghmrznhoqioldpllunt.supabase.co";
-const SUPABASE_KEY = "sb_publishable_aNo3_b6twiEH9sKoshNXqw_Gq-HasNz";
+const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const PACES = ["Flyers", "Movers", "Groovers I", "Groovers II", "Cruisers"];
@@ -59,17 +58,18 @@ function genCode(seed) {
 }
 
 // ── Real scannable QR (encodes "DRC1:<code>") ─────────────
+// Real scannable QR, rendered as an <img> from a QR-generation API —
+// no JS library to load means no more CDN-path or CORS failures.
+// Trade-off: the pass code is sent to api.qrserver.com's servers to
+// render the image. The code is an opaque id, not personal data, but
+// flagging it since it's a third-party network call either way.
 function RealQr({ value, size = 180 }) {
-  const ref = useRef(null);
-  const [libMissing, setLibMissing] = useState(false);
-  useEffect(() => {
-    if (typeof QRCode === "undefined") { setLibMissing(true); return; }
-    if (ref.current) QRCode.toCanvas(ref.current, value, { width: size, margin: 1, color: { dark: "#000000", light: "#ffffff" } });
-  }, [value, size]);
-  if (libMissing) {
-    return <div style={{ width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center", background: "#eee", color: "#333", fontSize: 11, fontWeight: 700, textAlign: "center", padding: 10 }}>QR unavailable — show this code instead: {value}</div>;
-  }
-  return <canvas ref={ref} width={size} height={size} style={{ display: "block" }} />;
+  const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}`;
+  return <img src={src} alt="Member pass QR code" width={size} height={size} style={{ display: "block" }}
+    onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }} />;
+}
+function RealQrFallback({ value, size = 180 }) {
+  return <div style={{ display: "none", width: size, height: size, alignItems: "center", justifyContent: "center", background: "#eee", color: "#333", fontSize: 11, fontWeight: 700, textAlign: "center", padding: 10 }}>QR unavailable — show this code instead: {value}</div>;
 }
 
 // ── Camera-based QR scanner (decodes via jsQR) ────────────
@@ -128,7 +128,7 @@ function App() {
   const [authSent, setAuthSent] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [needsProfile, setNeedsProfile] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", pace: "", waiver: false });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", pace: "", waiver: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -186,21 +186,68 @@ function App() {
     (async () => {
       const runners = await refreshAll();
       const mine = runners.find(r => r.auth_user_id === session.user.id);
-      if (mine) { setMe(mine); setView("member"); setTab("pass"); }
-      else { setNeedsProfile(true); setView("completeProfile"); }
+      if (mine) { setMe(mine); setView("member"); setTab("pass"); return; }
+
+      // Came from "Create my pass" — we already have their details saved
+      // locally from before the magic-link round trip, so finish signup
+      // automatically instead of asking them to re-enter everything.
+      const pendingRaw = localStorage.getItem("drc_pending_signup");
+      if (pendingRaw) {
+        const pending = JSON.parse(pendingRaw);
+        if (pending.email === session.user.email) {
+          localStorage.removeItem("drc_pending_signup");
+          const full = pending.firstName + " " + pending.lastName;
+          const { data, error } = await sb.from("runners").insert({
+            auth_user_id: session.user.id,
+            first_name: pending.firstName,
+            last_name: pending.lastName,
+            email: session.user.email,
+            pace: pending.pace,
+            code: genCode(full + session.user.email),
+            joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
+          }).select().single();
+          if (!error) {
+            setMe(data);
+            setAllRunners(r => r.concat([data]));
+            setView("member"); setTab("pass");
+            return;
+          }
+          // fall through to manual completion if the auto-insert failed
+        }
+      }
+      setNeedsProfile(true); setView("completeProfile");
     })();
   }, [session]);
 
   const ev = events[eventIdx] || null;
 
   // ── Auth ─────────────────────────────────────────────────
+  async function requestMagicLink(email) {
+    setLoading(true);
+    const { error } = await sb.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { emailRedirectTo: window.location.origin } });
+    setLoading(false);
+    return error;
+  }
+
   async function sendMagicLink() {
     setAuthErr("");
     if (!isEmail(authEmail)) return setAuthErr("That email doesn't look right.");
-    setLoading(true);
-    const { error } = await sb.auth.signInWithOtp({ email: authEmail.trim().toLowerCase(), options: { emailRedirectTo: window.location.origin } });
-    setLoading(false);
-    if (error) return setAuthErr("Couldn't send the link. Try again in a minute.");
+    const error = await requestMagicLink(authEmail);
+    if (error) return setAuthErr(error.status === 429 ? "Too many attempts — wait a few minutes and try again." : "Couldn't send the link. Try again in a minute.");
+    setAuthSent(true);
+  }
+
+  async function submitSignup() {
+    setError("");
+    if (!form.firstName.trim()) return setError("Add your first name.");
+    if (!form.lastName.trim()) return setError("Add your last name too.");
+    if (!isEmail(form.email)) return setError("That email doesn't look right.");
+    if (!form.pace) return setError("Pick a pace group.");
+    if (!form.waiver) return setError("You'll need to agree to the waiver to run with us.");
+    const email = form.email.trim().toLowerCase();
+    localStorage.setItem("drc_pending_signup", JSON.stringify({ email, firstName: form.firstName.trim(), lastName: form.lastName.trim(), pace: form.pace }));
+    const error = await requestMagicLink(email);
+    if (error) return setError(error.status === 429 ? "Too many attempts — wait a few minutes and try again." : "Couldn't send the link. Try again in a minute.");
     setAuthSent(true);
   }
 
@@ -318,12 +365,66 @@ function App() {
           <h2 style={{ margin: "0 0 8px", fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96 }}>Get started</h2>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 30 }}>Runner, captain or admin — pick one.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <button className="btn-primary" onClick={() => setLandingStep("email")}>Create my pass</button>
+            <button className="btn-primary" onClick={() => setLandingStep("signup")}>Create my pass</button>
             <button className="btn-ghost" onClick={() => setLandingStep("email")}>Access my pass by email</button>
             <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
             <button className="btn-ghost" style={{ color: "#e52240", borderColor: "#e52240" }} onClick={() => setView("gate")}>Captain check-in</button>
             <button className="btn-ghost" style={{ color: "#e52240", borderColor: "#e52240" }} onClick={() => setView("gate")}>Admin dashboard</button>
           </div>
+        </div>
+      );
+    }
+    if (landingStep === "signup") {
+      return (
+        <div className="app-shell" style={{ padding: "6px 24px 40px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+            <img src={DRC_LOGO} alt="DRC" style={{ width: 30, height: "auto", display: "block" }} />
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>ONE TIME SETUP</div>
+          </div>
+          <button onClick={() => { setLandingStep("welcome"); setAuthSent(false); setError(""); }} style={{ background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0, marginBottom: 16 }}>← Back</button>
+
+          {authSent ? (
+            <div className="ok">Check your email for a sign-in link — clicking it finishes creating your pass with the details you just entered.</div>
+          ) : (
+            <>
+              <h2 style={{ margin: "0 0 8px", fontSize: 34, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96 }}>Make your pass</h2>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 24 }}>Takes 30 seconds. Your QR never changes, so save it to your wallet and forget about it.</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="label">FIRST NAME</label>
+                    <input className="field" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} placeholder="First" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="label">LAST NAME</label>
+                    <input className="field" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Last" />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">EMAIL</label>
+                  <input className="field" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="you@email.com" />
+                  <div style={{ fontSize: 11, fontWeight: 500, color: "#6a6a6a", marginTop: 8, lineHeight: 1.5 }}>We send a sign-in link. No password to remember.</div>
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 10 }}>CHOOSE YOUR PACE GROUP</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {PACES.map(p => (
+                      <button key={p} onClick={() => setForm(f => ({ ...f, pace: p }))} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 48, padding: "0 14px", cursor: "pointer", borderRadius: 4, textAlign: "left", fontSize: 14, fontWeight: 800, textTransform: "uppercase", background: form.pace === p ? "#1a0a0e" : "#121212", border: "1px solid " + (form.pace === p ? "#e52240" : "#2a2a2a"), color: "#fff", alignItems: "center" }}>
+                        <span>{p}</span><span style={{ opacity: .7 }}>{PACE_TIMES[p]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => setForm(f => ({ ...f, waiver: !f.waiver }))} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 52, padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (form.waiver ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left" }}>
+                  <span style={{ flex: "0 0 22px", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, background: form.waiver ? "#e52240" : "transparent", border: "2px solid " + (form.waiver ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.waiver ? "✓" : ""}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>I agree to the waiver, terms and Code of Conduct</span>
+                </button>
+                {error && <div className="err">{error}</div>}
+                <button className="btn-primary" disabled={loading} onClick={submitSignup}>{loading ? "Sending…" : "Create my pass"}</button>
+                <div style={{ fontSize: 11, fontWeight: 500, color: "#5a5a5a", lineHeight: 1.5 }}>Waivers are valid one year from signup. We'll email you before yours expires.</div>
+              </div>
+            </>
+          )}
         </div>
       );
     }
@@ -411,6 +512,7 @@ function App() {
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 14 }}>SCAN AT ANY DRC RUN</div>
             <div style={{ background: "#fff", padding: 14, display: "flex", justifyContent: "center", marginBottom: 16 }}>
               <RealQr value={"DRC1:" + me.code} />
+              <RealQrFallback value={"DRC1:" + me.code} />
             </div>
             <div style={{ fontSize: 20, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", marginBottom: 6 }}>{me.first_name} {me.last_name}</div>
             <div style={{ display: "flex", gap: 20, marginBottom: 14 }}>
