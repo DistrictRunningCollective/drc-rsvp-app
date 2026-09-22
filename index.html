@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DRC Pass</title>
+<title>DRC Member Pass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,500;0,600;0,700;0,800;0,900;1,800&display=swap" rel="stylesheet">
@@ -207,7 +207,7 @@ function App() {
   const [newAdminCode, setNewAdminCode] = useState("");
   const [streakMsg, setStreakMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
-  const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
+  const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
   const [editingEventId, setEditingEventId] = useState(null);
   const [eventSaveMsg, setEventSaveMsg] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -493,6 +493,23 @@ function App() {
     return upcoming[0] || null;
   }, [events]);
 
+  // An event the runner RSVP'd to that's happening right now — only
+  // detectable for events with a real end time set, since without one
+  // there's no reliable way to know when it's actually over. Separate
+  // from nextEvent: once an event's start time has passed, it already
+  // drops out of nextEvent's "upcoming" filter, so there's no overlap.
+  const ongoingEvent = useMemo(() => {
+    if (!me) return null;
+    const now = new Date();
+    return events.find(x => {
+      if (x.cancelled || !x.event_date || !x.event_end_time) return false;
+      if (!rsvpMap[x.id]?.has(me.id)) return false;
+      const start = new Date(x.event_date + "T" + (x.event_time ? x.event_time.slice(0, 5) : "00:00") + ":00");
+      const end = new Date(x.event_date + "T" + x.event_end_time.slice(0, 5) + ":00");
+      return start <= now && now <= end;
+    }) || null;
+  }, [events, rsvpMap, me]);
+
   // Waivers are valid 1 year from waiver_signed_at (matches the signup copy).
   const waiverExpiresAt = me?.waiver_signed_at ? new Date(new Date(me.waiver_signed_at).getTime() + 365 * 24 * 60 * 60 * 1000) : null;
   const waiverDaysLeft = waiverExpiresAt ? Math.ceil((waiverExpiresAt - new Date()) / 86400000) : null;
@@ -653,12 +670,12 @@ function App() {
   }
   function newEventForm() {
     setEditingEventId(null);
-    setEventForm({ name: "", event_date: "", event_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
+    setEventForm({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
     setAddingLocation(false);
   }
   function loadEventForm(x) {
     setEditingEventId(x.id);
-    setEventForm({ name: x.name, event_date: x.event_date || "", event_time: x.event_time ? x.event_time.slice(0, 5) : "", location_id: x.location_id || "", notes: x.notes || "", mileage: x.mileage, special: x.special, remind: x.remind });
+    setEventForm({ name: x.name, event_date: x.event_date || "", event_time: x.event_time ? x.event_time.slice(0, 5) : "", event_end_time: x.event_end_time ? x.event_end_time.slice(0, 5) : "", location_id: x.location_id || "", notes: x.notes || "", mileage: x.mileage, special: x.special, remind: x.remind });
     setAddingLocation(false);
   }
   async function saveEventForm() {
@@ -667,6 +684,7 @@ function App() {
     const { error } = await sb.rpc("admin_save_event", {
       p_code: verifiedCode, p_id: id, p_name: eventForm.name,
       p_event_date: eventForm.event_date || null, p_event_time: eventForm.event_time || null,
+      p_event_end_time: eventForm.event_end_time || null,
       p_location_id: eventForm.location_id || null, p_notes: eventForm.notes,
       p_mileage: eventForm.mileage, p_special: eventForm.special, p_remind: eventForm.remind,
     });
@@ -994,6 +1012,18 @@ function App() {
                 <span style={{ color: "#fff", letterSpacing: ".1em" }}>{me.code}</span>
               </div>
             </div>
+            {ongoingEvent && (
+              <div style={{ marginTop: 20, border: "1px solid #e52240", padding: "18px 20px" }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 8 }}>HAPPENING NOW</div>
+                <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.3 }}>{ongoingEvent.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#7a7a7a", marginTop: 6, lineHeight: 1.5 }}>{eventDateLabel(ongoingEvent)} · {eventTimeLabel(ongoingEvent)} · {eventLocation(ongoingEvent, locations).name}</div>
+                {checkinMap[ongoingEvent.id]?.has(me.id) ? (
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#4ade80", marginTop: 12, letterSpacing: ".08em" }}>✓ CHECKED IN</div>
+                ) : (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e52240", marginTop: 12, letterSpacing: ".08em" }}>YOU'RE RSVP'D — NOT CHECKED IN YET</div>
+                )}
+              </div>
+            )}
             {nextEvent && (
               myCheckedIn ? (
                 <div style={{ marginTop: 20, background: "#e52240", color: "#000", padding: "18px 20px" }}>
@@ -1114,9 +1144,13 @@ function App() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {events.map(x => {
                 const on = rsvpMap[x.id]?.has(me.id);
+                const checkedIn = checkinMap[x.id]?.has(me.id);
                 return (
                   <div key={x.id} className="card" style={{ opacity: x.cancelled ? 0.5 : 1 }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240", letterSpacing: ".1em" }}>{eventDateLabel(x)} · {eventTimeLabel(x)}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240", letterSpacing: ".1em" }}>{eventDateLabel(x)} · {eventTimeLabel(x)}</div>
+                      {checkedIn && <div style={{ fontSize: 10, fontWeight: 800, color: "#4ade80", letterSpacing: ".08em" }}>✓ CHECKED IN</div>}
+                    </div>
                     <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", margin: "6px 0" }}>{x.name}</div>
                     <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 12 }}>{eventLocation(x, locations).name} · {eventLocation(x, locations).address}</div>
                     {x.hold && (
@@ -1344,6 +1378,10 @@ function App() {
                 <div style={{ display: "flex", gap: 10 }}>
                   <input className="field" type="date" value={eventForm.event_date} onChange={e => setEventField({ event_date: e.target.value })} style={{ colorScheme: "dark" }} />
                   <input className="field" type="time" value={eventForm.event_time} onChange={e => setEventField({ event_time: e.target.value })} style={{ colorScheme: "dark" }} />
+                </div>
+                <div>
+                  <label className="label">END TIME (OPTIONAL — used to show "happening now")</label>
+                  <input className="field" type="time" value={eventForm.event_end_time} onChange={e => setEventField({ event_end_time: e.target.value })} style={{ colorScheme: "dark" }} />
                 </div>
                 <div>
                   <label className="label">LOCATION</label>
