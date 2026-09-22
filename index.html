@@ -173,6 +173,11 @@ function App() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [myHistory, setMyHistory] = useState([]);
   const [editingField, setEditingField] = useState(null); // null | 'pace' | 'dist'
+  const [waiverBannerDismissed, setWaiverBannerDismissed] = useState(false);
+  const [resigning, setResigning] = useState(false);
+  const [resignChecked, setResignChecked] = useState(false);
+  const [resignError, setResignError] = useState("");
+  const [resignLoading, setResignLoading] = useState(false);
 
   // captain/admin gate — the CODE never lives in this file; we only ever
   // hold the role string the server returned, plus the code the person
@@ -254,6 +259,7 @@ function App() {
             email: session.user.email,
             pace: pending.pace,
             dist: "Long Distance",
+            waiver_signed_at: new Date().toISOString(),
             code: genCode(full + session.user.email),
             joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
           }).select().single();
@@ -333,6 +339,42 @@ function App() {
     return upcoming[0] || null;
   }, [events]);
 
+  // Waivers are valid 1 year from waiver_signed_at (matches the signup copy).
+  const waiverExpiresAt = me?.waiver_signed_at ? new Date(new Date(me.waiver_signed_at).getTime() + 365 * 24 * 60 * 60 * 1000) : null;
+  const waiverDaysLeft = waiverExpiresAt ? Math.ceil((waiverExpiresAt - new Date()) / 86400000) : null;
+  const waiverExpired = waiverDaysLeft !== null && waiverDaysLeft <= 0;
+  const waiverWarning = waiverDaysLeft !== null && waiverDaysLeft > 0 && waiverDaysLeft <= 7;
+
+  async function submitResign() {
+    setResignError("");
+    if (!resignChecked) return setResignError("You'll need to agree to the waiver to keep running with us.");
+    setResignLoading(true);
+    const signedAt = new Date().toISOString();
+    const { error } = await sb.from("runners").update({ waiver_signed_at: signedAt, waiver_reminder_sent_at: null }).eq("id", me.id);
+    setResignLoading(false);
+    if (error) return setResignError("Something went wrong. Try again.");
+    setMe(m => ({ ...m, waiver_signed_at: signedAt, waiver_reminder_sent_at: null }));
+    setResigning(false); setResignChecked(false); setWaiverBannerDismissed(false);
+  }
+
+  function renderResignForm(cancellable) {
+    return (
+      <div style={{ textAlign: cancellable ? "left" : "center" }}>
+        {!cancellable && <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 10 }}>WAIVER EXPIRED</div>}
+        {!cancellable && <div style={{ fontSize: 20, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", color: "#fff", lineHeight: 1.05, marginBottom: 10 }}>Resign to keep running with us</div>}
+        {!cancellable && <div style={{ fontSize: 12, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 18 }}>Your waiver expired. You'll need to agree again before you can check in or RSVP.</div>}
+        <button onClick={() => setResignChecked(c => !c)} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 52, width: "100%", padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (resignChecked ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left", marginBottom: 10 }}>
+          <span style={{ flex: "0 0 22px", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, background: resignChecked ? "#e52240" : "transparent", border: "2px solid " + (resignChecked ? "#e52240" : "#3a3a3a"), color: "#000" }}>{resignChecked ? "✓" : ""}</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>I agree to the waiver, terms and Code of Conduct</span>
+        </button>
+        <a href="/waiver.html" target="_blank" rel="noopener" style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#e52240", textDecoration: "underline", marginBottom: 14 }}>Read the waiver</a>
+        {resignError && <div className="err" style={{ marginBottom: 14 }}>{resignError}</div>}
+        <button className="btn-primary" disabled={resignLoading} onClick={submitResign}>{resignLoading ? "Saving…" : "Resign and continue"}</button>
+        {cancellable && <button onClick={() => { setResigning(false); setResignChecked(false); setResignError(""); }} style={{ width: "100%", marginTop: 10, minHeight: 40, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", borderRadius: 4, fontSize: 12, fontWeight: 700, textTransform: "uppercase", cursor: "pointer" }}>Cancel</button>}
+      </div>
+    );
+  }
+
   // ── Auth ─────────────────────────────────────────────────
   async function requestMagicLink(email) {
     setLoading(true);
@@ -378,6 +420,7 @@ function App() {
       email: session.user.email,
       pace: form.pace,
       dist: "Long Distance",
+      waiver_signed_at: new Date().toISOString(),
       code: genCode(full + session.user.email),
       joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
     }).select().single();
@@ -693,10 +736,33 @@ function App() {
   if (view === "member" && me) {
     const myRsvp = nextEvent && rsvpMap[nextEvent.id]?.has(me.id);
     const myCheckedIn = nextEvent && checkinMap[nextEvent.id]?.has(me.id);
+
+    // Expired waiver blocks the whole app — no tabs, no nav, nothing
+    // reachable until they resign.
+    if (waiverExpired) {
+      return (
+        <div className="app-shell" style={{ padding: "40px 22px", justifyContent: "center" }}>
+          {renderResignForm(false)}
+        </div>
+      );
+    }
+
     return (
       <div className="app-shell" style={{ padding: "24px 20px 90px" }}>
         {tab === "pass" && (
           <>
+            {resigning ? (
+              <div className="card">{renderResignForm(true)}</div>
+            ) : (
+              <>
+                {waiverWarning && !waiverBannerDismissed && (
+                  <div style={{ border: "1px solid #e52240", background: "#1a0a0e", padding: "14px 16px", marginBottom: 18, position: "relative" }}>
+                    <button onClick={() => setWaiverBannerDismissed(true)} aria-label="Dismiss" style={{ position: "absolute", top: 10, right: 10, background: "none", border: "none", color: "#8a8a8a", fontSize: 16, cursor: "pointer", padding: 4 }}>×</button>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginBottom: 6, paddingRight: 20 }}>Your waiver expires in {waiverDaysLeft} day{waiverDaysLeft === 1 ? "" : "s"}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#cc9999", lineHeight: 1.5, marginBottom: 12 }}>Resign now so you don't lose access to your pass.</div>
+                    <button onClick={() => setResigning(true)} style={{ minHeight: 38, padding: "0 18px", background: "#e52240", color: "#000", border: "none", fontSize: 11, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", letterSpacing: ".05em", borderRadius: 4, cursor: "pointer" }}>Resign waiver</button>
+                  </div>
+                )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
               <img src={DRC_LOGO} alt="DRC" style={{ width: 30, height: "auto", display: "block" }} />
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : "MEMBER PASS"}</div>
@@ -793,6 +859,8 @@ function App() {
               )
             )}
             <button onClick={signOut} style={{ marginTop: 22, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Not you? Sign out</button>
+              </>
+            )}
           </>
         )}
 
