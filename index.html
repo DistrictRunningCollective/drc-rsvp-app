@@ -55,6 +55,15 @@ const GUIDELINES = [
 function initials(first, last) {
   return ((first?.[0] || "") + (last?.[0] || "")).toUpperCase();
 }
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
 function formatDateLabel(d) {
   if (!d) return "";
   const dt = new Date(d + "T00:00:00");
@@ -320,6 +329,122 @@ function App() {
       window.open(url, "_blank");
     }
     setQrSaving(false);
+  }
+
+  // Draws the whole pass (avatar, name, QR, pace/Saturdays, member since
+  // + code) onto an offscreen canvas and saves that as one image. Falls
+  // back to saveQrToPhotos() if anything about the render fails — most
+  // likely a CORS restriction on the QR image or (less likely) an
+  // uploaded profile photo, either of which would otherwise silently
+  // taint the whole canvas and block export entirely.
+  async function savePassCard() {
+    if (!me) return;
+    setQrSaving(true);
+    try {
+      const SCALE = 2;
+      const W = 340;
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      await document.fonts.ready;
+
+      const pad = 20;
+      const r = 33;
+      const qrSize = W - pad * 2 - 32;
+      const H = pad + r * 2 + 18 + 14 + 14 + qrSize + 32 + 20 + 18 + 24 + 1 + 20 + 12 + pad;
+
+      canvas.width = W * SCALE; canvas.height = H * SCALE;
+      ctx.scale(SCALE, SCALE);
+
+      ctx.fillStyle = "#0a0a0a";
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#232323"; ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+      let y = pad;
+      const cx = pad + r, cy = y + r;
+
+      function drawInitialsAvatar() {
+        ctx.fillStyle = "#1a1a1a";
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#e52240";
+        ctx.font = "italic 900 22px Montserrat, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(initials(me.first_name, me.last_name), cx, cy + 1);
+      }
+      if (me.photo_url) {
+        try {
+          const img = await loadImage(me.photo_url);
+          ctx.save();
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+          ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+          ctx.restore();
+        } catch (e) { drawInitialsAvatar(); }
+      } else {
+        drawInitialsAvatar();
+      }
+      ctx.strokeStyle = "#e52240"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "italic 900 22px Montserrat, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText((me.first_name + " " + me.last_name).toUpperCase(), cx + r + 14, cy);
+
+      y = pad + r * 2 + 18;
+      ctx.fillStyle = "#8a8a8a";
+      ctx.font = "800 10px Montserrat, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      ctx.fillText("SCAN AT ANY DRC RUN", pad, y);
+      y += 28;
+
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize * 3}x${qrSize * 3}&data=${encodeURIComponent("DRC1:" + me.code)}`;
+      const qrImg = await loadImage(qrUrl); // throws on CORS/network failure — caught below
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(pad, y, W - pad * 2, qrSize + 32);
+      ctx.drawImage(qrImg, pad + 16, y + 16, qrSize, qrSize);
+      y += qrSize + 32 + 20;
+
+      ctx.fillStyle = "#6a6a6a";
+      ctx.font = "800 9px Montserrat, sans-serif";
+      ctx.fillText("PACE GROUP", pad, y);
+      ctx.fillText("SATURDAYS", pad + 150, y);
+      y += 18;
+      ctx.fillStyle = "#e52240";
+      ctx.font = "700 13px Montserrat, sans-serif";
+      ctx.fillText(me.pace.toUpperCase(), pad, y);
+      ctx.fillText(me.dist.toUpperCase(), pad + 150, y);
+      y += 24;
+
+      ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
+      y += 20;
+
+      ctx.fillStyle = "#8a8a8a";
+      ctx.font = "600 12px Montserrat, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("MEMBER SINCE " + me.joined_label, pad, y);
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "right";
+      ctx.fillText(me.code, W - pad, y);
+
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png"));
+      const file = new File([blob], `drc-pass-${me.code}.png`, { type: "image/png" });
+      if (typeof navigator.share === "function" && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: "DRC Member Pass" }); }
+        catch (e) { /* user cancelled the share sheet — not an error */ }
+      } else {
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objUrl; a.download = `drc-pass-${me.code}.png`;
+        a.click();
+        URL.revokeObjectURL(objUrl);
+      }
+      setQrSaving(false);
+    } catch (e) {
+      // Full-card render failed — fall back to the QR-only save, which
+      // has its own three-tier fallback already.
+      await saveQrToPhotos();
+    }
   }
 
   async function uploadPhoto(file) {
@@ -816,7 +941,7 @@ function App() {
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a" }}>SCAN AT ANY DRC RUN</div>
-                <button onClick={saveQrToPhotos} disabled={qrSaving} style={{ background: "none", border: "none", color: "#e52240", fontSize: 10, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>{qrSaving ? "Saving…" : "↓ Save"}</button>
+                <button onClick={savePassCard} disabled={qrSaving} style={{ background: "none", border: "none", color: "#e52240", fontSize: 10, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>{qrSaving ? "Saving…" : "↓ Save"}</button>
               </div>
               <div style={{ background: "#fff", padding: 16, display: "flex", justifyContent: "center", marginBottom: 18 }}>
                 <RealQr value={"DRC1:" + me.code} />
