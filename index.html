@@ -444,7 +444,6 @@ function App() {
   }
 
   function kioskHandleScan(text) {
-    setKioskScanning(false);
     const m = /^DRC1:(.+)$/.exec(text.trim());
     const code = m ? m[1] : text.trim();
     const found = allRunners.find(r => r.code === code);
