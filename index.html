@@ -605,6 +605,7 @@ function App() {
                   <span style={{ flex: "0 0 22px", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, background: form.waiver ? "#e52240" : "transparent", border: "2px solid " + (form.waiver ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.waiver ? "✓" : ""}</span>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>I agree to the waiver, terms and Code of Conduct</span>
                 </button>
+                <a href="/waiver.html" target="_blank" rel="noopener" style={{ fontSize: 11, fontWeight: 700, color: "#e52240", textDecoration: "underline", marginTop: -6 }}>Read the waiver</a>
                 {error && <div className="err">{error}</div>}
                 <button className="btn-primary" disabled={loading} onClick={submitSignup}>{loading ? "Sending…" : "Create my pass"}</button>
                 <div style={{ fontSize: 11, fontWeight: 500, color: "#5a5a5a", lineHeight: 1.5 }}>Waivers are valid one year from signup. We'll email you before yours expires.</div>
@@ -680,6 +681,7 @@ function App() {
             <span style={{ flex: "0 0 22px", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, background: form.waiver ? "#e52240" : "transparent", border: "2px solid " + (form.waiver ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.waiver ? "✓" : ""}</span>
             <span style={{ fontSize: 12, fontWeight: 600 }}>I agree to the waiver, terms and Code of Conduct</span>
           </button>
+          <a href="/waiver.html" target="_blank" rel="noopener" style={{ fontSize: 11, fontWeight: 700, color: "#e52240", textDecoration: "underline", marginTop: -6 }}>Read the waiver</a>
           {error && <div className="err">{error}</div>}
           <button className="btn-primary" disabled={loading} onClick={completeProfile}>{loading ? "Creating…" : "Create my pass"}</button>
         </div>
