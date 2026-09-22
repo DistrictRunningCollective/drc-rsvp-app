@@ -326,7 +326,7 @@ function App() {
     const now = new Date();
     const upcoming = events
       .filter(x => !x.cancelled && x.event_date)
-      .map(x => ({ ...x, _dt: new Date(x.event_date + "T" + (x.event_time || "00:00") + ":00") }))
+      .map(x => ({ ...x, _dt: new Date(x.event_date + "T" + (x.event_time ? x.event_time.slice(0, 5) : "00:00") + ":00") }))
       .filter(x => x._dt >= now)
       .sort((a, b) => a._dt - b._dt);
     return upcoming[0] || null;
@@ -886,6 +886,11 @@ function App() {
                     <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240", letterSpacing: ".1em" }}>{eventDateLabel(x)} · {eventTimeLabel(x)}</div>
                     <div style={{ fontSize: 18, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", margin: "6px 0" }}>{x.name}</div>
                     <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 12 }}>{eventLocation(x, locations).name} · {eventLocation(x, locations).address}</div>
+                    {x.hold && (
+                      <div style={{ marginBottom: 12, padding: "10px 12px", background: "#2a2410", borderLeft: "3px solid #f0dc9a", display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: "#f0dc9a" }}>WEATHER HOLD — EXPECT DELAY</span>
+                      </div>
+                    )}
                     <button className="btn-ghost" disabled={x.cancelled} onClick={() => toggleRsvp(x.id)} style={{ background: on ? "#e52240" : "transparent", color: on ? "#000" : "#e52240", borderColor: "#e52240" }}>
                       {x.cancelled ? "CANCELLED" : (on ? "YOU'RE IN — TAP TO CANCEL" : "RSVP")}
                     </button>
