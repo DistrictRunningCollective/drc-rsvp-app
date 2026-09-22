@@ -196,6 +196,7 @@ function App() {
   const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
   const [editingEventId, setEditingEventId] = useState(null);
   const [eventSaveMsg, setEventSaveMsg] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [locations, setLocations] = useState([]);
   const [addingLocation, setAddingLocation] = useState(false);
   const [newLocationName, setNewLocationName] = useState("");
@@ -484,6 +485,11 @@ function App() {
     await refreshAll();
     setEventField({ location_id: newId });
     setNewLocationName(""); setNewLocationAddress(""); setAddingLocation(false);
+  }
+  async function deleteEvent(id) {
+    setDeleteConfirmId(null);
+    await sb.rpc("admin_delete_event", { p_code: verifiedCode, p_event_id: id });
+    refreshAll();
   }
   async function toggleEventCancel(id) {
     await sb.rpc("admin_toggle_event_flag", { p_code: verifiedCode, p_event_id: id, p_flag: "cancelled" });
@@ -1080,6 +1086,20 @@ function App() {
                       <button onClick={() => toggleEventHold(x.id)} style={{ flex: 1, minHeight: 40, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: x.hold ? "#e8c34a" : "#8a8a8a", border: "1px solid " + (x.hold ? "#e8c34a" : "#2a2a2a") }}>{x.hold ? "LIFT HOLD" : "WEATHER HOLD"}</button>
                       <button onClick={() => toggleEventCancel(x.id)} style={{ flex: 1, minHeight: 40, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: x.cancelled ? "#8a8a8a" : "#e52240", border: "1px solid " + (x.cancelled ? "#2a2a2a" : "#e52240") }}>{x.cancelled ? "REACTIVATE" : "CANCEL RUN"}</button>
                     </div>
+                    {x.cancelled && (
+                      deleteConfirmId === x.id ? (
+                        <div style={{ marginTop: 10, border: "1px solid #e52240", background: "#1a0a0e", padding: 14, borderRadius: 2 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 6 }}>Delete {x.name}?</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#cc9999", lineHeight: 1.5, marginBottom: 14 }}>This also deletes its check-in history and RSVPs. This can't be undone.</div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={() => deleteEvent(x.id)} style={{ flex: 1, minHeight: 40, background: "#e52240", color: "#000", border: "none", fontSize: 11, fontWeight: 900, letterSpacing: ".08em", borderRadius: 2, cursor: "pointer" }}>YES, DELETE</button>
+                            <button onClick={() => setDeleteConfirmId(null)} style={{ flex: 1, minHeight: 40, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", fontSize: 11, fontWeight: 800, letterSpacing: ".08em", borderRadius: 2, cursor: "pointer" }}>CANCEL</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => setDeleteConfirmId(x.id)} style={{ width: "100%", marginTop: 8, minHeight: 40, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: "#e52240", border: "1px solid #e52240" }}>DELETE EVENT</button>
+                      )
+                    )}
                   </div>
                 ))}
               </div>
