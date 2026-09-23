@@ -1120,7 +1120,6 @@ function App() {
                 </div>
               )
             )}
-            <button onClick={signOut} style={{ marginTop: 22, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Not you? Sign out</button>
               </>
             )}
           </>
@@ -1226,7 +1225,7 @@ function App() {
               <button className="btn-ghost" onClick={() => { setEditPhone(me.phone || ""); setEditSmsOptIn(!!me.sms_opt_in); setEditProfileMsg(""); setEditingProfile(true); }} style={{ marginTop: 22 }}>Edit profile</button>
             )}
 
-            <button className="btn-ghost" onClick={signOut} style={{ marginTop: 12, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0", textAlign: "left", width: "auto" }}>← Start over as a new member</button>
+            <button className="btn-ghost" onClick={signOut} style={{ marginTop: 12, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0", textAlign: "left", width: "auto" }}>Sign out</button>
           </div>
         )}
 
