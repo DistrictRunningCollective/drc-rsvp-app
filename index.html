@@ -103,6 +103,7 @@ const DRC_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABEsAAAR/CAYAAADj
 const PACE_TIMES = { "Flyers": "Sub 7:00/mi", "Movers": "7:00–8:00/mi", "Groovers I": "8:00–9:00/mi", "Groovers II": "9:00–10:00/mi", "Cruisers": "10:00+/mi" };
 
 function isEmail(v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v); }
+function isPhone(v) { return (v || "").replace(/\D/g, "").length >= 10; }
 function genCode(seed) {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -183,7 +184,7 @@ function App() {
   const [authSent, setAuthSent] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [needsProfile, setNeedsProfile] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", pace: "", waiver: false });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", smsOptIn: false, pace: "", waiver: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -199,6 +200,11 @@ function App() {
   const [editingField, setEditingField] = useState(null); // null | 'pace' | 'dist'
   const [waiverBannerDismissed, setWaiverBannerDismissed] = useState(false);
   const [resigning, setResigning] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editPhone, setEditPhone] = useState("");
+  const [editSmsOptIn, setEditSmsOptIn] = useState(false);
+  const [editProfileMsg, setEditProfileMsg] = useState("");
+  const [editProfileSaving, setEditProfileSaving] = useState(false);
   const [resignChecked, setResignChecked] = useState(false);
   const [resignError, setResignError] = useState("");
   const [resignLoading, setResignLoading] = useState(false);
@@ -281,6 +287,9 @@ function App() {
             first_name: pending.firstName,
             last_name: pending.lastName,
             email: session.user.email,
+            phone: pending.phone,
+            sms_opt_in: pending.smsOptIn,
+            sms_opt_in_at: pending.smsOptIn ? new Date().toISOString() : null,
             pace: pending.pace,
             dist: "Long Distance",
             waiver_signed_at: new Date().toISOString(),
@@ -486,6 +495,21 @@ function App() {
     await sb.from("runners").update({ [field]: value }).eq("id", me.id);
   }
 
+  async function saveProfilePhone() {
+    setEditProfileMsg("");
+    if (!isPhone(editPhone)) return setEditProfileMsg("Add a phone number (10 digits).");
+    setEditProfileSaving(true);
+    const smsChanged = editSmsOptIn !== me.sms_opt_in;
+    const patch = { phone: editPhone.trim(), sms_opt_in: editSmsOptIn };
+    if (smsChanged) patch.sms_opt_in_at = editSmsOptIn ? new Date().toISOString() : null;
+    const { error } = await sb.from("runners").update(patch).eq("id", me.id);
+    setEditProfileSaving(false);
+    if (error) return setEditProfileMsg("Something went wrong. Try again.");
+    setMe(m => ({ ...m, ...patch }));
+    setAllRunners(rs => rs.map(r => r.id === me.id ? { ...r, ...patch } : r));
+    setEditingProfile(false);
+  }
+
   async function saveStravaLink() {
     if (!me) return;
     await sb.from("runners").update({ strava_url: stravaLink.trim() }).eq("id", me.id);
@@ -582,10 +606,11 @@ function App() {
     if (!form.firstName.trim()) return setError("Add your first name.");
     if (!form.lastName.trim()) return setError("Add your last name too.");
     if (!isEmail(form.email)) return setError("That email doesn't look right.");
+    if (!isPhone(form.phone)) return setError("Add a phone number (10 digits).");
     if (!form.pace) return setError("Pick a pace group.");
     if (!form.waiver) return setError("You'll need to agree to the waiver to run with us.");
     const email = form.email.trim().toLowerCase();
-    localStorage.setItem("drc_pending_signup", JSON.stringify({ email, firstName: form.firstName.trim(), lastName: form.lastName.trim(), pace: form.pace }));
+    localStorage.setItem("drc_pending_signup", JSON.stringify({ email, firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(), smsOptIn: form.smsOptIn, pace: form.pace }));
     const error = await requestMagicLink(email);
     if (error) return setError(error.status === 429 ? "Too many attempts — wait a few minutes and try again." : "Couldn't send the link. Try again in a minute.");
     setAuthSent(true);
@@ -595,6 +620,7 @@ function App() {
     setError("");
     if (!form.firstName.trim()) return setError("Add your first name.");
     if (!form.lastName.trim()) return setError("Add your last name too.");
+    if (!isPhone(form.phone)) return setError("Add a phone number (10 digits).");
     if (!form.pace) return setError("Pick a pace group.");
     if (!form.waiver) return setError("You'll need to agree to the waiver to run with us.");
     setLoading(true);
@@ -604,6 +630,9 @@ function App() {
       first_name: form.firstName.trim(),
       last_name: form.lastName.trim(),
       email: session.user.email,
+      phone: form.phone.trim(),
+      sms_opt_in: form.smsOptIn,
+      sms_opt_in_at: form.smsOptIn ? new Date().toISOString() : null,
       pace: form.pace,
       dist: "Long Distance",
       waiver_signed_at: new Date().toISOString(),
@@ -822,6 +851,14 @@ function App() {
                   <div style={{ fontSize: 11, fontWeight: 500, color: "#6a6a6a", marginTop: 8, lineHeight: 1.5 }}>We send a sign-in link. No password to remember.</div>
                 </div>
                 <div>
+                  <label className="label">PHONE NUMBER</label>
+                  <input className="field" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(202) 555-0100" />
+                </div>
+                <button onClick={() => setForm(f => ({ ...f, smsOptIn: !f.smsOptIn }))} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 48, padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (form.smsOptIn ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left" }}>
+                  <span style={{ flex: "0 0 20px", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, background: form.smsOptIn ? "#e52240" : "transparent", border: "2px solid " + (form.smsOptIn ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.smsOptIn ? "✓" : ""}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Text me reminders and updates <span style={{ color: "#6a6a6a" }}>(optional)</span></span>
+                </button>
+                <div>
                   <div className="label" style={{ marginBottom: 10 }}>CHOOSE YOUR PACE GROUP</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {PACES.map(p => (
@@ -897,6 +934,14 @@ function App() {
               <input className="field" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
             </div>
           </div>
+          <div>
+            <label className="label">PHONE NUMBER</label>
+            <input className="field" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(202) 555-0100" />
+          </div>
+          <button onClick={() => setForm(f => ({ ...f, smsOptIn: !f.smsOptIn }))} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 48, padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (form.smsOptIn ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left" }}>
+            <span style={{ flex: "0 0 20px", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, background: form.smsOptIn ? "#e52240" : "transparent", border: "2px solid " + (form.smsOptIn ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.smsOptIn ? "✓" : ""}</span>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Text me reminders and updates <span style={{ color: "#6a6a6a" }}>(optional)</span></span>
+          </button>
           <div>
             <label className="label">PACE GROUP</label>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1148,7 +1193,25 @@ function App() {
               </div>
             )}
 
-            <button className="btn-ghost" onClick={signOut} style={{ marginTop: 22, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0", textAlign: "left", width: "auto" }}>← Start over as a new member</button>
+            {editingProfile ? (
+              <div style={{ border: "1px solid #232323", padding: 16, marginTop: 22 }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".18em", color: "#6a6a6a", marginBottom: 12 }}>EDIT PROFILE</div>
+                <label className="label">PHONE NUMBER</label>
+                <input className="field" type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="(202) 555-0100" style={{ marginBottom: 12 }} />
+                <button onClick={() => setEditSmsOptIn(v => !v)} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 44, padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (editSmsOptIn ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left", width: "100%", marginBottom: 12 }}>
+                  <span style={{ flex: "0 0 20px", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, background: editSmsOptIn ? "#e52240" : "transparent", border: "2px solid " + (editSmsOptIn ? "#e52240" : "#3a3a3a"), color: "#000" }}>{editSmsOptIn ? "✓" : ""}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Text me reminders and updates</span>
+                </button>
+                <div style={{ height: 1, background: "#1e1e1e", margin: "0 0 14px" }} />
+                {editProfileMsg && <div className={editProfileMsg.includes("wrong") || editProfileMsg.includes("Add a") ? "err" : "ok"} style={{ marginBottom: 12 }}>{editProfileMsg}</div>}
+                <button className="btn-primary" disabled={editProfileSaving} onClick={saveProfilePhone} style={{ marginBottom: 8 }}>{editProfileSaving ? "Saving…" : "Save"}</button>
+                <button onClick={() => { setEditingProfile(false); setEditProfileMsg(""); }} style={{ width: "100%", minHeight: 36, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", borderRadius: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer" }}>Cancel</button>
+              </div>
+            ) : (
+              <button className="btn-ghost" onClick={() => { setEditPhone(me.phone || ""); setEditSmsOptIn(!!me.sms_opt_in); setEditProfileMsg(""); setEditingProfile(true); }} style={{ marginTop: 22 }}>Edit profile</button>
+            )}
+
+            <button className="btn-ghost" onClick={signOut} style={{ marginTop: 12, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0", textAlign: "left", width: "auto" }}>← Start over as a new member</button>
           </div>
         )}
 
