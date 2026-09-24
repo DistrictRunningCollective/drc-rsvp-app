@@ -305,6 +305,26 @@ function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Live cross-device updates: whenever runners, checkins, rsvps, events,
+  // or locations change anywhere (any device, any session), refetch —
+  // so a captain's phone sees a brand-new signup or check-in without
+  // anyone needing to manually reload. Debounced so a burst of rapid
+  // changes (several check-ins in a row) collapses into one refetch
+  // instead of hammering the database.
+  useEffect(() => {
+    let debounceId = null;
+    const debouncedRefresh = () => {
+      clearTimeout(debounceId);
+      debounceId = setTimeout(() => refreshAll(), 400);
+    };
+    const channel = sb.channel("drc-live-changes");
+    ["runners", "checkins", "rsvps", "events", "locations"].forEach(table => {
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, debouncedRefresh);
+    });
+    channel.subscribe();
+    return () => { clearTimeout(debounceId); sb.removeChannel(channel); };
+  }, []);
+
   // Restore an unlocked captain/admin or kiosk session, if one was saved.
   // Decryption is async, so this briefly shows the landing screen before
   // switching over — that flash is the tradeoff for not keeping the
@@ -726,6 +746,12 @@ function App() {
   // ── Captain / admin gate ──────────────────────────────────
   function switchTab(t) { setTab(t); localStorage.setItem("drc_last_tab", t); }
   function switchCaptainTab(t) { setCaptainTab(t); localStorage.setItem("drc_last_captain_tab", t); }
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  async function manualRefresh() {
+    setManualRefreshing(true);
+    await refreshAll();
+    setManualRefreshing(false);
+  }
 
   async function submitGateCode() {
     setPinErr("");
@@ -1359,6 +1385,7 @@ function App() {
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 24, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{inSet.size}</div>
             <div style={{ fontSize: 10, color: "#8a8a8a" }}>OF {rsvpSet.size} RSVP</div>
+            <button onClick={manualRefresh} disabled={manualRefreshing} style={{ marginTop: 6, background: "none", border: "none", color: "#5a5a5a", fontSize: 10, fontWeight: 800, letterSpacing: ".08em", cursor: "pointer", padding: 0 }}>{manualRefreshing ? "…" : "↻ Refresh"}</button>
           </div>
         </div>
 
