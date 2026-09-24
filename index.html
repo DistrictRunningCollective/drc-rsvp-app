@@ -1446,7 +1446,10 @@ function App() {
         )}
 
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
-          {(me.is_active_member ? ["pass","profile","runs","members"] : ["pass","profile","runs"]).map(t => (
+          {(me.is_active_member
+            ? (role && role !== "runner" ? ["pass","runs","profile","members"] : ["pass","profile","runs","members"])
+            : ["pass","profile","runs"]
+          ).map(t => (
             <button key={t} onClick={() => { switchTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: tab===t ? "#e52240" : "transparent", border: "none", color: tab===t ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
           ))}
           {role && role !== "runner" && (
@@ -1522,8 +1525,8 @@ function App() {
           {role === "admin" && <>
             <button onClick={() => switchCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#e52240" : "transparent", border: "none", color: captainTab==="dashboard" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
             <button onClick={() => switchCaptainTab("events")} style={{ flex: 1, minHeight: 46, background: captainTab==="events" ? "#e52240" : "transparent", border: "none", color: captainTab==="events" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>EVENTS</button>
-            <button onClick={() => switchCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#e52240" : "transparent", border: "none", color: captainTab==="settings" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
             <button onClick={() => switchCaptainTab("users")} style={{ flex: 1, minHeight: 46, background: captainTab==="users" ? "#e52240" : "transparent", border: "none", color: captainTab==="users" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>USERS</button>
+            <button onClick={() => switchCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#e52240" : "transparent", border: "none", color: captainTab==="settings" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
           </>}
         </div>
 
@@ -1585,8 +1588,8 @@ function App() {
                 <span style={{ fontSize: 56, fontWeight: 900, fontStyle: "italic", lineHeight: 0.86, color: "#e52240" }}>{checkedCount}</span>
                 <span style={{ fontSize: 15, fontWeight: 700, color: "#6a6a6a" }}>/ {rsvpCount} RSVP'd</span>
               </div>
-              <div style={{ height: 8, background: "#1a1a1a", marginTop: 14 }}>
-                <div style={{ height: "100%", width: turnoutPct + "%", background: "#e52240", transition: "width .4s ease" }} />
+              <div style={{ height: 8, width: "100%", background: "#1a1a1a", marginTop: 14, overflow: "hidden", boxSizing: "border-box" }}>
+                <div style={{ height: "100%", width: turnoutPct + "%", maxWidth: "100%", background: "#e52240", transition: "width .4s ease" }} />
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#7a7a7a", marginTop: 10 }}>{turnoutPct}% of RSVPs have scanned in</div>
             </div>
@@ -1834,7 +1837,7 @@ function App() {
                   <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #191919" }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: r.is_active_member ? "#4ade80" : "#6a6a6a" }}>{r.is_active_member ? "MEMBER" : "NOT A MEMBER"}</div>
+                      {r.is_active_member && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e52240" }}>MEMBER</div>}
                     </div>
                     <select value={r.app_role || "runner"} onChange={e => setUserRole(r.id, e.target.value)} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
                       <option value="runner">RUNNER</option>
