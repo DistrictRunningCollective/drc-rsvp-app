@@ -278,6 +278,8 @@ function App() {
   const [memberSinceEmail, setMemberSinceEmail] = useState("");
   const [memberSinceDate, setMemberSinceDate] = useState("");
   const [memberSinceMsg, setMemberSinceMsg] = useState("");
+  const [usersSearch, setUsersSearch] = useState("");
+  const [usersMsg, setUsersMsg] = useState("");
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
@@ -986,6 +988,14 @@ function App() {
     setMemberSinceEmail(""); setMemberSinceDate("");
   }
 
+  async function setUserRole(runnerId, role) {
+    setUsersMsg("");
+    const { error } = await sb.rpc("admin_set_app_role", { p_code: verifiedCode, p_runner_id: runnerId, p_role: role });
+    if (error) return setUsersMsg("Couldn't update — check you're using the current admin code.");
+    setAllRunners(rs => rs.map(r => r.id === runnerId ? { ...r, app_role: role } : r));
+    setUsersMsg("Updated.");
+  }
+
   async function startMembershipSync() {
     setMembershipSyncMsg("");
     setMembershipSyncing(true);
@@ -1579,6 +1589,7 @@ function App() {
             <button onClick={() => switchCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#e52240" : "transparent", border: "none", color: captainTab==="dashboard" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
             <button onClick={() => switchCaptainTab("events")} style={{ flex: 1, minHeight: 46, background: captainTab==="events" ? "#e52240" : "transparent", border: "none", color: captainTab==="events" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>EVENTS</button>
             <button onClick={() => switchCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#e52240" : "transparent", border: "none", color: captainTab==="settings" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
+            <button onClick={() => switchCaptainTab("users")} style={{ flex: 1, minHeight: 46, background: captainTab==="users" ? "#e52240" : "transparent", border: "none", color: captainTab==="users" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>USERS</button>
           </>}
         </div>
 
@@ -1873,6 +1884,32 @@ function App() {
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {captainTab === "users" && (
+          <div>
+            <input className="field" placeholder="Search all users" value={usersSearch} onChange={e => setUsersSearch(e.target.value)} style={{ marginBottom: 16 }} />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {allRunners
+                .filter(r => !usersSearch.trim() || (r.first_name + " " + r.last_name + " " + r.email).toLowerCase().includes(usersSearch.trim().toLowerCase()))
+                .sort((a, b) => (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name))
+                .map(r => (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #191919" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: r.is_active_member ? "#4ade80" : "#6a6a6a" }}>{r.is_active_member ? "MEMBER" : "NOT A MEMBER"}</div>
+                    </div>
+                    <select value={r.app_role || "runner"} onChange={e => setUserRole(r.id, e.target.value)} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
+                      <option value="runner">RUNNER</option>
+                      <option value="flight_crew">FLIGHT CREW</option>
+                      <option value="captain">CAPTAIN</option>
+                      <option value="admin">ADMIN</option>
+                    </select>
+                  </div>
+                ))}
+            </div>
+            {usersMsg && <div className={usersMsg.includes("Updated") ? "ok" : "err"} style={{ marginTop: 12 }}>{usersMsg}</div>}
           </div>
         )}
 
