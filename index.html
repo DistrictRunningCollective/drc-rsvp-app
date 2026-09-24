@@ -1236,24 +1236,19 @@ function App() {
                 )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
               <img src={DRC_LOGO} alt="DRC" style={{ width: 30, height: "auto", display: "block" }} />
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : "MEMBER PASS"}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : (me.is_active_member ? "MEMBER PASS" : "PASS")}</div>
             </div>
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
-                <label style={{ position: "relative", flex: "0 0 auto", width: 66, height: 66, borderRadius: "50%", overflow: "hidden", cursor: "pointer", background: "#1a1a1a", border: "2px solid #e52240", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "relative", flex: "0 0 auto", width: 66, height: 66, borderRadius: "50%", overflow: "hidden", background: "#1a1a1a", border: "2px solid #e52240", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {me.photo_url ? (
                     <img src={me.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
                     <span style={{ fontSize: 22, fontWeight: 900, fontStyle: "italic", color: "#e52240" }}>{initials(me.first_name, me.last_name)}</span>
                   )}
-                  <input type="file" accept="image/*" onChange={e => uploadPhoto(e.target.files[0])} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
-                </label>
+                </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 22, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 1.03, marginBottom: 6 }}>{me.first_name} {me.last_name}</div>
-                  <label style={{ display: "inline-block", position: "relative", fontSize: 10, fontWeight: 800, letterSpacing: ".16em", color: "#8a8a8a", cursor: "pointer", borderBottom: "1px solid #3a3a3a", paddingBottom: 2 }}>
-                    {photoUploading ? "UPLOADING…" : (me.photo_url ? "CHANGE PHOTO" : "ADD PHOTO")}
-                    <input type="file" accept="image/*" onChange={e => uploadPhoto(e.target.files[0])} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
-                  </label>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -1363,7 +1358,10 @@ function App() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 8 }}>MEMBER SINCE {me.joined_label}</div>
                 <h2 style={{ margin: 0, fontSize: 28, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98 }}>{me.first_name} {me.last_name}</h2>
-                {photoUploading && <div style={{ fontSize: 10, color: "#8a8a8a", marginTop: 4 }}>Uploading…</div>}
+                <label style={{ display: "inline-block", position: "relative", fontSize: 10, fontWeight: 800, letterSpacing: ".16em", color: "#8a8a8a", cursor: "pointer", borderBottom: "1px solid #3a3a3a", paddingBottom: 2, marginTop: 8 }}>
+                  {photoUploading ? "UPLOADING…" : (me.photo_url ? "CHANGE PHOTO" : "ADD PHOTO")}
+                  <input type="file" accept="image/*" onChange={e => uploadPhoto(e.target.files[0])} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                </label>
               </div>
             </div>
 
