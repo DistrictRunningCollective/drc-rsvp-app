@@ -272,6 +272,11 @@ function App() {
   const [clubIdMsg, setClubIdMsg] = useState("");
   const [apiRegInput, setApiRegInput] = useState("");
   const [apiRegMsg, setApiRegMsg] = useState("");
+  const [orgKeyInput, setOrgKeyInput] = useState("");
+  const [orgKeyMsg, setOrgKeyMsg] = useState("");
+  const [memberSinceEmail, setMemberSinceEmail] = useState("");
+  const [memberSinceDate, setMemberSinceDate] = useState("");
+  const [memberSinceMsg, setMemberSinceMsg] = useState("");
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
@@ -959,6 +964,25 @@ function App() {
     const { error } = await sb.rpc("admin_set_runsignup_api_reg", { p_code: verifiedCode, p_api_reg: apiRegInput.trim() });
     if (error) return setApiRegMsg("Couldn't save — check you're using the current admin code.");
     setApiRegMsg("Saved.");
+  }
+
+  async function saveOrgKey() {
+    setOrgKeyMsg("");
+    if (!orgKeyInput.trim()) return setOrgKeyMsg("Enter the org API key.");
+    const { error } = await sb.rpc("admin_set_runsignup_org_key", { p_code: verifiedCode, p_key: orgKeyInput.trim() });
+    if (error) return setOrgKeyMsg("Couldn't save — check you're using the current admin code.");
+    setOrgKeyMsg("Saved.");
+  }
+
+  async function saveMemberSince() {
+    setMemberSinceMsg("");
+    if (!isEmail(memberSinceEmail)) return setMemberSinceMsg("Enter a valid email.");
+    if (!memberSinceDate) return setMemberSinceMsg("Pick a date.");
+    const { error } = await sb.rpc("admin_set_member_since", { p_code: verifiedCode, p_email: memberSinceEmail.trim(), p_date: memberSinceDate });
+    if (error) return setMemberSinceMsg("Couldn't save — check the email matches a runner and you're using the current admin code.");
+    await refreshAll();
+    setMemberSinceMsg("Saved. The sync won't overwrite this going forward.");
+    setMemberSinceEmail(""); setMemberSinceDate("");
   }
 
   async function startMembershipSync() {
@@ -1803,27 +1827,41 @@ function App() {
               )}
               {runsignupMsg && <div className={runsignupMsg.includes("Connected") ? "ok" : "err"} style={{ marginTop: 10 }}>{runsignupMsg}</div>}
 
-              {runsignupStatus?.connected && (
-                <div style={{ marginTop: 16 }}>
-                  <label className="label">CLUB ID <span style={{ color: "#5a5a5a" }}>(from your MemberOrg dashboard URL, changes yearly)</span></label>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    <input className="field" value={clubIdInput} onChange={e => setClubIdInput(e.target.value)} placeholder="e.g. 823" />
-                    <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveClubId}>Save</button>
-                  </div>
-                  {clubIdMsg && <div className={clubIdMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{clubIdMsg}</div>}
-
-                  <label className="label">API CALLER REG TOKEN <span style={{ color: "#5a5a5a" }}>(rsu_api_reg, not the secret)</span></label>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    <input className="field" value={apiRegInput} onChange={e => setApiRegInput(e.target.value)} placeholder="From API Caller Registration" />
-                    <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveApiReg}>Save</button>
-                  </div>
-                  {apiRegMsg && <div className={apiRegMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{apiRegMsg}</div>}
-                  <div style={{ fontSize: 11, fontWeight: 500, color: "#5a5a5a", lineHeight: 1.5, marginBottom: 12 }}>The X-RSU-API-REG-SECRET itself is never entered here — that gets stored directly in Supabase Vault via SQL, not through the app.</div>
-
-                  <button className="btn-ghost" disabled={membershipSyncing} onClick={startMembershipSync}>{membershipSyncing ? "Working…" : "Sync membership now"}</button>
-                  {membershipSyncMsg && <div className={membershipSyncMsg.includes("done") ? "ok" : "err"} style={{ marginTop: 10 }}>{membershipSyncMsg}</div>}
+              <div style={{ marginTop: 16 }}>
+                <label className="label">CLUB ID <span style={{ color: "#5a5a5a" }}>(from your MemberOrg dashboard URL, changes yearly)</span></label>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <input className="field" value={clubIdInput} onChange={e => setClubIdInput(e.target.value)} placeholder="e.g. 823" />
+                  <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveClubId}>Save</button>
                 </div>
-              )}
+                {clubIdMsg && <div className={clubIdMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{clubIdMsg}</div>}
+
+                <label className="label">API CALLER REG TOKEN <span style={{ color: "#5a5a5a" }}>(rsu_api_reg, not the secret)</span></label>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <input className="field" value={apiRegInput} onChange={e => setApiRegInput(e.target.value)} placeholder="From API Caller Registration" />
+                  <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveApiReg}>Save</button>
+                </div>
+                {apiRegMsg && <div className={apiRegMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{apiRegMsg}</div>}
+
+                <label className="label">ORG API KEY <span style={{ color: "#5a5a5a" }}>(rsu_api_key, not the secret — used instead of OAuth for the sync)</span></label>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <input className="field" value={orgKeyInput} onChange={e => setOrgKeyInput(e.target.value)} placeholder="Org-level API key" />
+                  <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveOrgKey}>Save</button>
+                </div>
+                {orgKeyMsg && <div className={orgKeyMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{orgKeyMsg}</div>}
+                <div style={{ fontSize: 11, fontWeight: 500, color: "#5a5a5a", lineHeight: 1.5, marginBottom: 12 }}>Neither secret is entered here — both get stored directly in Supabase Vault via SQL, not through the app.</div>
+
+                <button className="btn-ghost" disabled={membershipSyncing} onClick={startMembershipSync}>{membershipSyncing ? "Working…" : "Sync membership now"}</button>
+                {membershipSyncMsg && <div className={membershipSyncMsg.includes("done") ? "ok" : "err"} style={{ marginTop: 10 }}>{membershipSyncMsg}</div>}
+
+                <div style={{ height: 1, background: "#1e1e1e", margin: "16px 0" }} />
+                <label className="label">FIX A MEMBER'S JOIN DATE <span style={{ color: "#5a5a5a" }}>(overrides what the sync pulls from RunSignUp)</span></label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+                  <input className="field" type="email" value={memberSinceEmail} onChange={e => setMemberSinceEmail(e.target.value)} placeholder="Their email" />
+                  <input className="field" type="date" value={memberSinceDate} onChange={e => setMemberSinceDate(e.target.value)} style={{ colorScheme: "dark" }} />
+                  <button className="btn-primary" onClick={saveMemberSince}>Save</button>
+                </div>
+                {memberSinceMsg && <div className={memberSinceMsg.includes("Saved") ? "ok" : "err"}>{memberSinceMsg}</div>}
+              </div>
             </div>
           </div>
         )}
