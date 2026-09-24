@@ -270,6 +270,8 @@ function App() {
   const [runsignupMsg, setRunsignupMsg] = useState("");
   const [clubIdInput, setClubIdInput] = useState("");
   const [clubIdMsg, setClubIdMsg] = useState("");
+  const [apiRegInput, setApiRegInput] = useState("");
+  const [apiRegMsg, setApiRegMsg] = useState("");
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
@@ -949,6 +951,14 @@ function App() {
     const { error } = await sb.rpc("admin_set_club_id", { p_code: verifiedCode, p_club_id: clubIdInput.trim() });
     if (error) return setClubIdMsg("Couldn't save — check you're using the current admin code.");
     setClubIdMsg("Saved.");
+  }
+
+  async function saveApiReg() {
+    setApiRegMsg("");
+    if (!apiRegInput.trim()) return setApiRegMsg("Enter the API Caller Reg token.");
+    const { error } = await sb.rpc("admin_set_runsignup_api_reg", { p_code: verifiedCode, p_api_reg: apiRegInput.trim() });
+    if (error) return setApiRegMsg("Couldn't save — check you're using the current admin code.");
+    setApiRegMsg("Saved.");
   }
 
   async function syncMembershipNow() {
@@ -1775,12 +1785,21 @@ function App() {
 
               {runsignupStatus?.connected && (
                 <div style={{ marginTop: 16 }}>
-                  <label className="label">CLUB ID <span style={{ color: "#5a5a5a" }}>(changes yearly, update here when it does)</span></label>
+                  <label className="label">CLUB ID <span style={{ color: "#5a5a5a" }}>(from your MemberOrg dashboard URL, changes yearly)</span></label>
                   <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    <input className="field" value={clubIdInput} onChange={e => setClubIdInput(e.target.value)} placeholder="e.g. 00464211" />
+                    <input className="field" value={clubIdInput} onChange={e => setClubIdInput(e.target.value)} placeholder="e.g. 823" />
                     <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveClubId}>Save</button>
                   </div>
                   {clubIdMsg && <div className={clubIdMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{clubIdMsg}</div>}
+
+                  <label className="label">API CALLER REG TOKEN <span style={{ color: "#5a5a5a" }}>(rsu_api_reg, not the secret)</span></label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <input className="field" value={apiRegInput} onChange={e => setApiRegInput(e.target.value)} placeholder="From API Caller Registration" />
+                    <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveApiReg}>Save</button>
+                  </div>
+                  {apiRegMsg && <div className={apiRegMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{apiRegMsg}</div>}
+                  <div style={{ fontSize: 11, fontWeight: 500, color: "#5a5a5a", lineHeight: 1.5, marginBottom: 12 }}>The X-RSU-API-REG-SECRET itself is never entered here — that gets stored directly in Supabase Vault via SQL, not through the app.</div>
+
                   <button className="btn-ghost" disabled={membershipSyncing} onClick={syncMembershipNow}>{membershipSyncing ? "Syncing… (can take up to 10s)" : "Sync membership now"}</button>
                   {membershipSyncMsg && <div className={membershipSyncMsg.includes("done") ? "ok" : "err"} style={{ marginTop: 10 }}>{membershipSyncMsg}</div>}
                 </div>
