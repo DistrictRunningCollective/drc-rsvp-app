@@ -266,6 +266,8 @@ function App() {
   const [newCaptainCode, setNewCaptainCode] = useState("");
   const [newAdminCode, setNewAdminCode] = useState("");
   const [streakMsg, setStreakMsg] = useState("");
+  const [runsignupStatus, setRunsignupStatus] = useState(null);
+  const [runsignupMsg, setRunsignupMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
   const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
   const [editingEventId, setEditingEventId] = useState(null);
@@ -323,6 +325,28 @@ function App() {
     });
     channel.subscribe();
     return () => { clearTimeout(debounceId); sb.removeChannel(channel); };
+  }, []);
+
+  // Check RunSignUp connection status, and handle the message coming back
+  // from the OAuth callback redirect (?runsignup=connected, etc.).
+  useEffect(() => {
+    sb.rpc("runsignup_connection_status").then(({ data }) => {
+      setRunsignupStatus(data?.[0] || { connected: false, updated_at: null });
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("runsignup");
+    if (result) {
+      const messages = {
+        connected: "Connected to RunSignUp.",
+        denied: "RunSignUp connection was cancelled or denied.",
+        expired: "That connection attempt expired — try again.",
+        tokenerror: "RunSignUp didn't return usable tokens — try again.",
+        savefailed: "Connected, but saving the tokens failed — try again.",
+      };
+      setRunsignupMsg(messages[result] || "Something went wrong connecting RunSignUp.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   // Restore an unlocked captain/admin or kiosk session, if one was saved.
@@ -1669,6 +1693,22 @@ function App() {
               <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 10 }}>Recalculated automatically every Monday from check-in history. Run it manually if you want to see it update right now.</div>
               <button className="btn-ghost" disabled={recalculating} onClick={recalcStreaksNow}>{recalculating ? "Recalculating…" : "Recalculate streaks now"}</button>
               {streakMsg && <div className={streakMsg.includes("recalculated") ? "ok" : "err"} style={{ marginTop: 10 }}>{streakMsg}</div>}
+            </div>
+
+            <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
+            <div>
+              <div className="label">RUNSIGNUP</div>
+              {runsignupStatus === null ? (
+                <div style={{ fontSize: 12, color: "#6a6a6a" }}>Checking…</div>
+              ) : runsignupStatus.connected ? (
+                <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 700 }}>✓ Connected{runsignupStatus.updated_at ? " · last connected " + new Date(runsignupStatus.updated_at).toLocaleDateString() : ""}</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 10 }}>Not connected. Connecting requires RunSignUp Race Director access.</div>
+                  <a href="https://rghmrznhoqioldpllunt.supabase.co/functions/v1/runsignup-oauth-start" className="btn-primary" style={{ display: "block", textAlign: "center", textDecoration: "none", lineHeight: "52px" }}>Connect RunSignUp</a>
+                </>
+              )}
+              {runsignupMsg && <div className={runsignupMsg.includes("Connected") ? "ok" : "err"} style={{ marginTop: 10 }}>{runsignupMsg}</div>}
             </div>
           </div>
         )}
