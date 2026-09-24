@@ -268,6 +268,7 @@ function App() {
   const [streakMsg, setStreakMsg] = useState("");
   const [runsignupStatus, setRunsignupStatus] = useState(null);
   const [runsignupMsg, setRunsignupMsg] = useState("");
+  const [runsignupExpanded, setRunsignupExpanded] = useState(false);
   const [clubIdInput, setClubIdInput] = useState("");
   const [clubIdMsg, setClubIdMsg] = useState("");
   const [apiRegInput, setApiRegInput] = useState("");
@@ -1810,7 +1811,16 @@ function App() {
 
             <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
             <div>
-              <div className="label">RUNSIGNUP</div>
+              <button onClick={() => setRunsignupExpanded(e => !e)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: runsignupExpanded ? 12 : 0 }}>
+                <span className="label" style={{ marginBottom: 0 }}>RUNSIGNUP</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: runsignupStatus?.connected ? "#4ade80" : "#6a6a6a" }}>{runsignupStatus === null ? "Checking…" : runsignupStatus.connected ? "✓ Connected" : "Not connected"}</span>
+                  <span style={{ color: "#6a6a6a", fontSize: 12 }}>{runsignupExpanded ? "▴" : "▾"}</span>
+                </span>
+              </button>
+
+              {runsignupExpanded && (
+                <>
               {runsignupStatus === null ? (
                 <div style={{ fontSize: 12, color: "#6a6a6a" }}>Checking…</div>
               ) : runsignupStatus.connected ? (
@@ -1862,6 +1872,8 @@ function App() {
                 </div>
                 {memberSinceMsg && <div className={memberSinceMsg.includes("Saved") ? "ok" : "err"}>{memberSinceMsg}</div>}
               </div>
+                </>
+              )}
             </div>
           </div>
         )}
