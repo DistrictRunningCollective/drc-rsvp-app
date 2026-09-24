@@ -69,6 +69,45 @@ function loadImage(src) {
     img.src = src;
   });
 }
+
+// ── Local session encryption ─────────────────────────────
+// Real AES-GCM encryption, not just encoding — but the derivation key
+// below is itself embedded in this file's JS, so this stops a passcode
+// from being plainly readable if someone glances at Local Storage in
+// the browser inspector; it doesn't stop someone who runs this app's
+// own JS in the console. That's the honest limit of anything client-
+// side-only with no server-held secret.
+let _drcKeyPromise = null;
+function drcDeriveKey() {
+  if (!_drcKeyPromise) {
+    _drcKeyPromise = crypto.subtle.digest("SHA-256", new TextEncoder().encode("drc-app-local-session-v1"))
+      .then(bits => crypto.subtle.importKey("raw", bits, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]));
+  }
+  return _drcKeyPromise;
+}
+async function drcEncrypt(obj) {
+  const key = await drcDeriveKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new TextEncoder().encode(JSON.stringify(obj));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+  return JSON.stringify({ iv: Array.from(iv), data: Array.from(new Uint8Array(ciphertext)) });
+}
+async function drcDecrypt(raw) {
+  try {
+    const key = await drcDeriveKey();
+    const { iv, data } = JSON.parse(raw);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(iv) }, key, new Uint8Array(data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  } catch (e) { return null; }
+}
+async function saveSession(key, obj) {
+  localStorage.setItem(key, await drcEncrypt(obj));
+}
+async function loadSession(key) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  return drcDecrypt(raw);
+}
 function formatDateLabel(d) {
   if (!d) return "";
   const dt = new Date(d + "T00:00:00");
@@ -178,7 +217,7 @@ function App() {
   const [me, setMe] = useState(null);
   const [view, setView] = useState("landing");
   const [landingStep, setLandingStep] = useState("welcome"); // welcome | email
-  const [tab, setTab] = useState("pass");
+  const [tab, setTab] = useState(() => localStorage.getItem("drc_last_tab") || "pass");
 
   const [authEmail, setAuthEmail] = useState("");
   const [authSent, setAuthSent] = useState(false);
@@ -216,7 +255,7 @@ function App() {
   const [role, setRole] = useState(null);        // 'captain' | 'admin' | null
   const [verifiedCode, setVerifiedCode] = useState(null);
   const [pinErr, setPinErr] = useState("");
-  const [captainTab, setCaptainTab] = useState("checkin");
+  const [captainTab, setCaptainTab] = useState(() => localStorage.getItem("drc_last_captain_tab") || "checkin");
   const [query, setQuery] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
@@ -264,6 +303,24 @@ function App() {
     sb.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
     return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Restore an unlocked captain/admin or kiosk session, if one was saved.
+  // Decryption is async, so this briefly shows the landing screen before
+  // switching over — that flash is the tradeoff for not keeping the
+  // passcode in plain, readable localStorage.
+  useEffect(() => {
+    (async () => {
+      const kiosk = await loadSession("drc_kiosk_session");
+      if (kiosk?.code) {
+        setKioskUnlocked(true); setVerifiedCode(kiosk.code); setRole("admin"); setView("kiosk");
+        return;
+      }
+      const captain = await loadSession("drc_captain_session");
+      if (captain?.code && captain?.role) {
+        setRole(captain.role); setVerifiedCode(captain.code); setView("captain");
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -667,10 +724,14 @@ function App() {
   }
 
   // ── Captain / admin gate ──────────────────────────────────
+  function switchTab(t) { setTab(t); localStorage.setItem("drc_last_tab", t); }
+  function switchCaptainTab(t) { setCaptainTab(t); localStorage.setItem("drc_last_captain_tab", t); }
+
   async function submitGateCode() {
     setPinErr("");
     const { data, error } = await sb.rpc("verify_access_code", { p_code: gateCode });
     if (error || !data) { setPinErr("Wrong passcode. Ask a lead for today's code."); setGateCode(""); return; }
+    await saveSession("drc_captain_session", { role: data, code: gateCode });
     setRole(data); setVerifiedCode(gateCode); setView("captain"); setGateCode("");
   }
 
@@ -1263,7 +1324,7 @@ function App() {
 
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
           {["pass","profile","runs"].map(t => (
-            <button key={t} onClick={() => { setTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: tab===t ? "#e52240" : "transparent", border: "none", color: tab===t ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
+            <button key={t} onClick={() => { switchTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: tab===t ? "#e52240" : "transparent", border: "none", color: tab===t ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
           ))}
         </div>
       </div>
@@ -1302,11 +1363,11 @@ function App() {
         </div>
 
         <div style={{ display: "flex", borderTop: "1px solid #1e1e1e", borderBottom: "1px solid #1e1e1e", marginBottom: 16 }}>
-          <button onClick={() => setCaptainTab("checkin")} style={{ flex: 1, minHeight: 46, background: captainTab==="checkin" ? "#e52240" : "transparent", border: "none", color: captainTab==="checkin" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>CHECK-IN</button>
+          <button onClick={() => switchCaptainTab("checkin")} style={{ flex: 1, minHeight: 46, background: captainTab==="checkin" ? "#e52240" : "transparent", border: "none", color: captainTab==="checkin" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>CHECK-IN</button>
           {role === "admin" && <>
-            <button onClick={() => setCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#e52240" : "transparent", border: "none", color: captainTab==="dashboard" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
-            <button onClick={() => setCaptainTab("events")} style={{ flex: 1, minHeight: 46, background: captainTab==="events" ? "#e52240" : "transparent", border: "none", color: captainTab==="events" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>EVENTS</button>
-            <button onClick={() => setCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#e52240" : "transparent", border: "none", color: captainTab==="settings" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
+            <button onClick={() => switchCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#e52240" : "transparent", border: "none", color: captainTab==="dashboard" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
+            <button onClick={() => switchCaptainTab("events")} style={{ flex: 1, minHeight: 46, background: captainTab==="events" ? "#e52240" : "transparent", border: "none", color: captainTab==="events" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>EVENTS</button>
+            <button onClick={() => switchCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#e52240" : "transparent", border: "none", color: captainTab==="settings" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
           </>}
         </div>
 
@@ -1537,7 +1598,7 @@ function App() {
           </div>
         )}
 
-        <button onClick={() => { setView("landing"); setRole(null); setVerifiedCode(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Lock this phone</button>
+        <button onClick={() => { localStorage.removeItem("drc_captain_session"); setView("landing"); setRole(null); setVerifiedCode(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Lock this phone</button>
       </div>
     );
   }
@@ -1567,7 +1628,7 @@ function App() {
                 setKioskGateCode(next);
                 if (next.length >= 4) {
                   sb.rpc("verify_access_code", { p_code: next }).then(({ data }) => {
-                    if (data === "admin") { setKioskUnlocked(true); setVerifiedCode(next); setRole("admin"); setKioskGateCode(""); }
+                    if (data === "admin") { saveSession("drc_kiosk_session", { code: next }); setKioskUnlocked(true); setVerifiedCode(next); setRole("admin"); setKioskGateCode(""); }
                     else { setKioskErr("Wrong passcode. Ask an admin to set it up."); setKioskGateCode(""); }
                   });
                 }
@@ -1609,7 +1670,7 @@ function App() {
             </div>
             <div style={{ fontSize: 18, fontWeight: 600, color: "#6a6a6a", lineHeight: 1.6 }}>{(() => { const next = MILESTONES.find(n => n > kioskResult.runs); return next ? "Next milestone at " + next + " runs." : "All milestones earned."; })()}</div>
           </div>
-          <button onClick={() => { setKioskUnlocked(false); setVerifiedCode(null); setRole(null); setKioskResult(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "0 44px 36px", display: "block" }}>Lock</button>
+          <button onClick={() => { localStorage.removeItem("drc_kiosk_session"); setKioskUnlocked(false); setVerifiedCode(null); setRole(null); setKioskResult(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "0 44px 36px", display: "block" }}>Lock</button>
         </div>
       );
     }
@@ -1632,7 +1693,7 @@ function App() {
         <div style={{ width: "100%", maxWidth: 420 }}><CameraScanner onDetect={kioskHandleScan} onClose={() => {}} /></div>
 
         <div style={{ fontSize: 17, fontWeight: 600, color: "#7a7a7a", lineHeight: 1.6 }}>{inSet.size} checked in · {ev ? ev.name : "—"}</div>
-        <button onClick={() => { setKioskUnlocked(false); setVerifiedCode(null); setRole(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Lock</button>
+        <button onClick={() => { localStorage.removeItem("drc_kiosk_session"); setKioskUnlocked(false); setVerifiedCode(null); setRole(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Lock</button>
       </div>
     );
   }
