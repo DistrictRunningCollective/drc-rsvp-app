@@ -975,10 +975,10 @@ function App() {
 
   async function checkMembershipSync() {
     setMembershipSyncMsg("Checking…");
-    const { error } = await sb.rpc("admin_check_membership_sync", { p_code: verifiedCode });
+    const { error } = await sb.rpc("sync_runsignup_membership_check");
     if (error) {
       setMembershipSyncing(false);
-      return setMembershipSyncMsg("Couldn't check — check you're using the current admin code.");
+      return setMembershipSyncMsg("Couldn't check — try again.");
     }
     const { data } = await sb.rpc("get_membership_sync_status");
     const s = data?.[0];
