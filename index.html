@@ -593,11 +593,25 @@ function App() {
     setMe(m => ({ ...m, strava_url: stravaLink.trim() }));
   }
 
-  const ev = events[eventIdx] || null;
+  // Chronological order, used by the Runs tab, the admin Events list, and
+  // the captain header — events without a real date (not yet edited since
+  // the date/time migration) sort to the end rather than breaking the sort.
+  const sortedEvents = useMemo(() => {
+    return events.slice().sort((a, b) => {
+      if (!a.event_date && !b.event_date) return 0;
+      if (!a.event_date) return 1;
+      if (!b.event_date) return -1;
+      const aDt = new Date(a.event_date + "T" + (a.event_time ? a.event_time.slice(0, 5) : "00:00") + ":00");
+      const bDt = new Date(b.event_date + "T" + (b.event_time ? b.event_time.slice(0, 5) : "00:00") + ":00");
+      return aDt - bDt;
+    });
+  }, [events]);
+
+  const ev = sortedEvents[eventIdx] || null;
 
   // The member Pass tab shows whatever event is actually coming up next
   // by real date/time — independent of whichever event a captain has
-  // cycled to elsewhere (that's `ev`/eventIdx, a separate captain-only
+  // picked elsewhere (that's `ev`/eventIdx, a separate captain-only
   // concept for choosing which roster to manage).
   const nextEvent = useMemo(() => {
     const now = new Date();
@@ -614,20 +628,6 @@ function App() {
   // there's no reliable way to know when it's actually over. Separate
   // from nextEvent: once an event's start time has passed, it already
   // drops out of nextEvent's "upcoming" filter, so there's no overlap.
-  // Chronological order, used by the Runs tab and the admin Events list —
-  // events without a real date (not yet edited since the date/time
-  // migration) sort to the end rather than breaking the sort.
-  const sortedEvents = useMemo(() => {
-    return events.slice().sort((a, b) => {
-      if (!a.event_date && !b.event_date) return 0;
-      if (!a.event_date) return 1;
-      if (!b.event_date) return -1;
-      const aDt = new Date(a.event_date + "T" + (a.event_time ? a.event_time.slice(0, 5) : "00:00") + ":00");
-      const bDt = new Date(b.event_date + "T" + (b.event_time ? b.event_time.slice(0, 5) : "00:00") + ":00");
-      return aDt - bDt;
-    });
-  }, [events]);
-
   const ongoingEvent = useMemo(() => {
     if (!me) return null;
     const now = new Date();
@@ -640,6 +640,26 @@ function App() {
       return start <= now && now <= end;
     }) || null;
   }, [events, rsvpMap, me]);
+
+  // Default to whichever event is currently happening or coming up next
+  // (first non-past entry in chronological order), falling back to the
+  // most recent past one if every event has already ended. Only runs
+  // once on first load — after that, whatever the captain picks stays
+  // picked even as Realtime keeps the event list fresh underneath. If
+  // the picked event ever disappears (e.g. deleted), the index is
+  // clamped back into range rather than pointing at nothing.
+  const didAutoSelectEvent = useRef(false);
+  const [eventPickerOpen, setEventPickerOpen] = useState(false);
+  useEffect(() => {
+    if (!sortedEvents.length) return;
+    if (!didAutoSelectEvent.current) {
+      didAutoSelectEvent.current = true;
+      const idx = sortedEvents.findIndex(x => !eventIsPast(x));
+      setEventIdx(idx !== -1 ? idx : sortedEvents.length - 1);
+    } else if (eventIdx >= sortedEvents.length) {
+      setEventIdx(sortedEvents.length - 1);
+    }
+  }, [sortedEvents]);
 
   // Waivers are valid 1 year from waiver_signed_at (matches the signup copy).
   const waiverExpiresAt = me?.waiver_signed_at ? new Date(new Date(me.waiver_signed_at).getTime() + 365 * 24 * 60 * 60 * 1000) : null;
@@ -1377,9 +1397,9 @@ function App() {
     const noShows = allRunners.filter(r => rsvpSet.has(r.id) && !inSet.has(r.id)).slice(0, 8);
     return (
       <div className="app-shell" style={{ padding: "20px 18px 40px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-          <button onClick={() => setEventIdx(i => (i+1) % Math.max(events.length,1))} style={{ background: "none", border: "none", color: "#fff", textAlign: "left", cursor: "pointer" }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240" }}>{ev ? eventDateLabel(ev) : "—"} ⌄</div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: eventPickerOpen ? 0 : 16 }}>
+          <button onClick={() => setEventPickerOpen(o => !o)} style={{ background: "none", border: "none", color: "#fff", textAlign: "left", cursor: "pointer" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240" }}>{ev ? eventDateLabel(ev) : "—"} {eventPickerOpen ? "▴" : "▾"}</div>
             <div style={{ fontSize: 17, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>{ev ? ev.name : "No events yet"}</div>
           </button>
           <div style={{ textAlign: "right" }}>
@@ -1388,6 +1408,34 @@ function App() {
             <button onClick={manualRefresh} disabled={manualRefreshing} style={{ marginTop: 6, background: "none", border: "none", color: "#5a5a5a", fontSize: 10, fontWeight: 800, letterSpacing: ".08em", cursor: "pointer", padding: 0 }}>{manualRefreshing ? "…" : "↻ Refresh"}</button>
           </div>
         </div>
+
+        {eventPickerOpen && (
+          <div style={{ border: "1px solid #232323", background: "#0f0f0f", marginBottom: 16, maxHeight: 320, overflowY: "auto" }}>
+            {sortedEvents.length === 0 && <div style={{ padding: 16, fontSize: 13, color: "#6a6a6a" }}>No events yet.</div>}
+            {sortedEvents.map((x, i) => {
+              const past = eventIsPast(x);
+              const today = x.event_date === new Date().toISOString().slice(0, 10);
+              const selected = i === eventIdx;
+              return (
+                <button key={x.id} onClick={() => { setEventIdx(i); setEventPickerOpen(false); }} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+                  padding: "12px 16px", background: selected ? "#1a0a0e" : "transparent",
+                  borderLeft: selected ? "3px solid #e52240" : "3px solid transparent",
+                  borderTop: i === 0 ? "none" : "1px solid #1a1a1a", cursor: "pointer", textAlign: "left",
+                  opacity: past && !selected ? 0.45 : 1,
+                }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".05em", color: selected ? "#e52240" : "#7a7a7a" }}>
+                      {eventDateLabel(x).toUpperCase()}{today ? " · TODAY" : (past ? " · PAST" : "")}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: selected ? "#fff" : "#d4d4d4" }}>{x.name}</div>
+                  </div>
+                  {selected && <div style={{ color: "#e52240", fontSize: 16 }}>✓</div>}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{ display: "flex", borderTop: "1px solid #1e1e1e", borderBottom: "1px solid #1e1e1e", marginBottom: 16 }}>
           <button onClick={() => switchCaptainTab("checkin")} style={{ flex: 1, minHeight: 46, background: captainTab==="checkin" ? "#e52240" : "transparent", border: "none", color: captainTab==="checkin" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>CHECK-IN</button>
