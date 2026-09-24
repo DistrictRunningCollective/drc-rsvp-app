@@ -768,6 +768,27 @@ function App() {
     setView("member"); setTab("pass");
   }
 
+  // Shared bottom nav — used by both the member view and the captain/
+  // admin portal, so navigation stays in one place no matter where
+  // someone is in the app. The role tab (Check-in/Admin) highlights
+  // when actually inside that portal; the rest highlight only while on
+  // the member view, and switch back to it when tapped from elsewhere.
+  function renderBottomNav() {
+    const baseTabs = me.is_active_member
+      ? (role && role !== "runner" ? ["pass","runs","profile","members"] : ["pass","profile","runs","members"])
+      : ["pass","profile","runs"];
+    return (
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
+        {baseTabs.map(t => (
+          <button key={t} onClick={() => { switchTab(t); setEditingField(null); setView("member"); }} style={{ flex: 1, minHeight: 56, background: (view === "member" && tab === t) ? "#e52240" : "transparent", border: "none", color: (view === "member" && tab === t) ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
+        ))}
+        {role && role !== "runner" && (
+          <button onClick={() => setView("captain")} style={{ flex: 1, minHeight: 56, background: view === "captain" ? "#e52240" : "transparent", border: "none", color: view === "captain" ? "#000" : "#e52240", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{role === "admin" ? "ADMIN" : "CHECK-IN"}</button>
+        )}
+      </div>
+    );
+  }
+
   // ── Captain / admin gate ──────────────────────────────────
   function switchTab(t) { setTab(t); localStorage.setItem("drc_last_tab", t); }
   function switchCaptainTab(t) { setCaptainTab(t); localStorage.setItem("drc_last_captain_tab", t); }
@@ -1445,17 +1466,7 @@ function App() {
           </div>
         )}
 
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
-          {(me.is_active_member
-            ? (role && role !== "runner" ? ["pass","runs","profile","members"] : ["pass","profile","runs","members"])
-            : ["pass","profile","runs"]
-          ).map(t => (
-            <button key={t} onClick={() => { switchTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: tab===t ? "#e52240" : "transparent", border: "none", color: tab===t ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
-          ))}
-          {role && role !== "runner" && (
-            <button onClick={() => setView("captain")} style={{ flex: 1, minHeight: 56, background: "transparent", border: "none", color: "#e52240", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{role === "admin" ? "ADMIN" : "CHECK-IN"}</button>
-          )}
-        </div>
+        {renderBottomNav()}
       </div>
     );
   }
@@ -1479,7 +1490,8 @@ function App() {
     const leaders = allRunners.slice().sort((a, b) => b.runs - a.runs).slice(0, 5);
     const noShows = allRunners.filter(r => rsvpSet.has(r.id) && !inSet.has(r.id)).slice(0, 8);
     return (
-      <div className="app-shell" style={{ padding: "20px 18px 40px" }}>
+      <>
+      <div className="app-shell" style={{ padding: "20px 18px 90px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: eventPickerOpen ? 0 : 16 }}>
           <button onClick={() => setEventPickerOpen(o => !o)} style={{ background: "none", border: "none", color: "#fff", textAlign: "left", cursor: "pointer" }}>
             <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240" }}>{ev ? eventDateLabel(ev) : "—"} {eventPickerOpen ? "▴" : "▾"}</div>
@@ -1852,11 +1864,10 @@ function App() {
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
-          <button onClick={() => { setView("member"); setTab("pass"); }} style={{ background: "none", border: "none", color: "#8a8a8a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← My pass</button>
-          <button onClick={signOut} style={{ background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Sign out</button>
-        </div>
+        <button onClick={signOut} style={{ background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "24px 0 0", display: "block" }}>Sign out</button>
       </div>
+      {renderBottomNav()}
+      </>
     );
   }
 
