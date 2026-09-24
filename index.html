@@ -70,44 +70,6 @@ function loadImage(src) {
   });
 }
 
-// ── Local session encryption ─────────────────────────────
-// Real AES-GCM encryption, not just encoding — but the derivation key
-// below is itself embedded in this file's JS, so this stops a passcode
-// from being plainly readable if someone glances at Local Storage in
-// the browser inspector; it doesn't stop someone who runs this app's
-// own JS in the console. That's the honest limit of anything client-
-// side-only with no server-held secret.
-let _drcKeyPromise = null;
-function drcDeriveKey() {
-  if (!_drcKeyPromise) {
-    _drcKeyPromise = crypto.subtle.digest("SHA-256", new TextEncoder().encode("drc-app-local-session-v1"))
-      .then(bits => crypto.subtle.importKey("raw", bits, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]));
-  }
-  return _drcKeyPromise;
-}
-async function drcEncrypt(obj) {
-  const key = await drcDeriveKey();
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = new TextEncoder().encode(JSON.stringify(obj));
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
-  return JSON.stringify({ iv: Array.from(iv), data: Array.from(new Uint8Array(ciphertext)) });
-}
-async function drcDecrypt(raw) {
-  try {
-    const key = await drcDeriveKey();
-    const { iv, data } = JSON.parse(raw);
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(iv) }, key, new Uint8Array(data));
-    return JSON.parse(new TextDecoder().decode(plain));
-  } catch (e) { return null; }
-}
-async function saveSession(key, obj) {
-  localStorage.setItem(key, await drcEncrypt(obj));
-}
-async function loadSession(key) {
-  const raw = localStorage.getItem(key);
-  if (!raw) return null;
-  return drcDecrypt(raw);
-}
 function formatDateLabel(d) {
   if (!d) return "";
   const dt = new Date(d + "T00:00:00");
@@ -251,10 +213,11 @@ function App() {
   // captain/admin gate — the CODE never lives in this file; we only ever
   // hold the role string the server returned, plus the code the person
   // typed (kept in memory only, re-verified server-side on every action).
-  const [gateCode, setGateCode] = useState("");
-  const [role, setRole] = useState(null);        // 'captain' | 'admin' | null
+  // verifiedCode now stays null in practice — there's no more passcode
+  // entry UI — but every RPC still accepts it as a backend fallback
+  // until that's fully removed later.
+  const [role, setRole] = useState(null);        // 'runner' | 'flight_crew' | 'captain' | 'admin' | null
   const [verifiedCode, setVerifiedCode] = useState(null);
-  const [pinErr, setPinErr] = useState("");
   const [captainTab, setCaptainTab] = useState(() => localStorage.getItem("drc_last_captain_tab") || "checkin");
   const [query, setQuery] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -291,9 +254,6 @@ function App() {
   const [addingLocation, setAddingLocation] = useState(false);
   const [newLocationName, setNewLocationName] = useState("");
   const [newLocationAddress, setNewLocationAddress] = useState("");
-  const [kioskGateCode, setKioskGateCode] = useState("");
-  const [kioskUnlocked, setKioskUnlocked] = useState(false);
-  const [kioskErr, setKioskErr] = useState("");
   const [kioskResult, setKioskResult] = useState(null);
 
   async function refreshAll() {
@@ -373,30 +333,19 @@ function App() {
     if (fresh && JSON.stringify(fresh) !== JSON.stringify(me)) setMe(fresh);
   }, [allRunners]);
 
-  // Restore an unlocked captain/admin or kiosk session, if one was saved.
-  // Decryption is async, so this briefly shows the landing screen before
-  // switching over — that flash is the tradeoff for not keeping the
-  // passcode in plain, readable localStorage.
+  // Same idea for role specifically — if an admin changes someone's
+  // role while they're actively signed in, the extra nav tab should
+  // reflect that without them needing to sign in again.
   useEffect(() => {
-    (async () => {
-      const kiosk = await loadSession("drc_kiosk_session");
-      if (kiosk?.code) {
-        setKioskUnlocked(true); setVerifiedCode(kiosk.code); setRole("admin"); setView("kiosk");
-        return;
-      }
-      const captain = await loadSession("drc_captain_session");
-      if (captain?.code && captain?.role) {
-        setRole(captain.role); setVerifiedCode(captain.code); setView("captain");
-      }
-    })();
-  }, []);
+    if (me?.app_role) setRole(me.app_role);
+  }, [me?.app_role]);
 
   useEffect(() => {
     if (!session) { setMe(null); return; }
     (async () => {
       const runners = await refreshAll();
       const mine = runners.find(r => r.auth_user_id === session.user.id);
-      if (mine) { setMe(mine); setView("member"); setTab("pass"); return; }
+      if (mine) { routeAfterSignIn(mine); return; }
 
       // Came from "Create my pass" — we already have their details saved
       // locally from before the magic-link round trip, so finish signup
@@ -422,9 +371,8 @@ function App() {
             joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
           }).select().single();
           if (!error) {
-            setMe(data);
             setAllRunners(r => r.concat([data]));
-            setView("member"); setTab("pass");
+            routeAfterSignIn(data);
             return;
           }
           // fall through to manual completion if the auto-insert failed
@@ -808,7 +756,16 @@ function App() {
 
   async function signOut() {
     await sb.auth.signOut();
-    setMe(null); setSession(null); setView("landing"); setLandingStep("welcome"); setAuthSent(false); setAuthEmail("");
+    setMe(null); setSession(null); setRole(null); setView("landing"); setLandingStep("welcome"); setAuthSent(false); setAuthEmail("");
+  }
+
+  // The one place that decides what someone sees right after signing
+  // in. Everyone always lands on their own Pass now — a role just adds
+  // an extra tab to the bottom nav rather than routing anywhere special.
+  function routeAfterSignIn(runner) {
+    setMe(runner);
+    setRole(runner.app_role || "runner");
+    setView("member"); setTab("pass");
   }
 
   // ── Captain / admin gate ──────────────────────────────────
@@ -819,14 +776,6 @@ function App() {
     setManualRefreshing(true);
     await refreshAll();
     setManualRefreshing(false);
-  }
-
-  async function submitGateCode() {
-    setPinErr("");
-    const { data, error } = await sb.rpc("verify_access_code", { p_code: gateCode });
-    if (error || !data) { setPinErr("Wrong passcode. Ask a lead for today's code."); setGateCode(""); return; }
-    await saveSession("drc_captain_session", { role: data, code: gateCode });
-    setRole(data); setVerifiedCode(gateCode); setView("captain"); setGateCode("");
   }
 
   async function checkIn(runnerId, eventId) {
@@ -1057,13 +1006,10 @@ function App() {
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>DISTRICT RUNNING COLLECTIVE</div>
           </div>
           <h2 style={{ margin: "0 0 8px", fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96 }}>Get started</h2>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 30 }}>Runner, captain or admin — pick one.</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 30 }}>Same sign-in, every time.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <button className="btn-primary" onClick={() => setLandingStep("signup")}>Create my pass</button>
             <button className="btn-ghost" onClick={() => setLandingStep("email")}>Access my pass by email</button>
-            <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
-            <button className="btn-ghost" style={{ color: "#e52240", borderColor: "#e52240" }} onClick={() => setView("gate")}>Captain check-in</button>
-            <button className="btn-ghost" style={{ color: "#e52240", borderColor: "#e52240" }} onClick={() => setView("gate")}>Admin dashboard</button>
           </div>
         </div>
       );
@@ -1147,21 +1093,6 @@ function App() {
         ) : (
           <div className="ok">Check your email for a sign-in link — it'll bring you right back here.</div>
         )}
-      </div>
-    );
-  }
-
-  if (view === "gate") {
-    return (
-      <div className="app-shell" style={{ padding: "40px 22px", justifyContent: "center", gap: 20, alignItems: "center" }}>
-        <button onClick={() => setView("landing")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← Back</button>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 10 }}>CAPTAINS + ADMINS ONLY</div>
-          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Enter passcode</h2>
-        </div>
-        <input className="field" type="password" inputMode="numeric" placeholder="Passcode" value={gateCode} onChange={e => setGateCode(e.target.value)} style={{ textAlign: "center", fontSize: 20 }} />
-        {pinErr && <div className="err">{pinErr}</div>}
-        <button className="btn-primary" onClick={submitGateCode}>Unlock</button>
       </div>
     );
   }
@@ -1518,6 +1449,9 @@ function App() {
           {(me.is_active_member ? ["pass","profile","runs","members"] : ["pass","profile","runs"]).map(t => (
             <button key={t} onClick={() => { switchTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: tab===t ? "#e52240" : "transparent", border: "none", color: tab===t ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
           ))}
+          {role && role !== "runner" && (
+            <button onClick={() => setView("captain")} style={{ flex: 1, minHeight: 56, background: "transparent", border: "none", color: "#e52240", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{role === "admin" ? "ADMIN" : "CHECK-IN"}</button>
+          )}
         </div>
       </div>
     );
@@ -1595,7 +1529,9 @@ function App() {
 
         {captainTab === "checkin" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <button onClick={() => { setView("kiosk"); setKioskUnlocked(false); setKioskGateCode(""); setKioskErr(""); setKioskResult(null); }} style={{ background: "none", border: "1px dashed #2a2a2a", color: "#8a8a8a", minHeight: 44, borderRadius: 4, fontSize: 11, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Go to kiosk mode →</button>
+            {role === "admin" && (
+              <button onClick={() => { setView("kiosk"); setKioskResult(null); }} style={{ background: "none", border: "1px dashed #2a2a2a", color: "#8a8a8a", minHeight: 44, borderRadius: 4, fontSize: 11, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer" }}>Go to kiosk mode →</button>
+            )}
             {scanning ? (
               <CameraScanner onDetect={handleScan} onClose={() => setScanning(false)} />
             ) : scanResult ? (
@@ -1913,7 +1849,10 @@ function App() {
           </div>
         )}
 
-        <button onClick={() => { localStorage.removeItem("drc_captain_session"); setView("landing"); setRole(null); setVerifiedCode(null); }} style={{ marginTop: 24, background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Lock this phone</button>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+          <button onClick={() => { setView("member"); setTab("pass"); }} style={{ background: "none", border: "none", color: "#8a8a8a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← My pass</button>
+          <button onClick={signOut} style={{ background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>Sign out</button>
+        </div>
       </div>
     );
   }
@@ -1922,39 +1861,6 @@ function App() {
     const inSet = ev ? (checkinMap[ev.id] || new Set()) : new Set();
     const groupLabel = ev && ev.mileage ? "MILEAGE GROUP" : "PACE GROUP";
     const kioskShell = { maxWidth: 760, width: "100%", minHeight: "100vh", margin: "0 auto", display: "flex", flexDirection: "column" };
-
-    if (!kioskUnlocked) {
-      return (
-        <div style={{ ...kioskShell, padding: "60px 40px", justifyContent: "center", alignItems: "center", textAlign: "center", gap: 20 }}>
-          <img src={DRC_LOGO} alt="DRC" style={{ width: 54, height: "auto" }} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: ".22em", color: "#e52240", marginBottom: 12 }}>KIOSK LOCKED</div>
-            <div style={{ fontSize: 42, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98 }}>Admin passcode<br/>to start</div>
-          </div>
-          <div style={{ display: "flex", gap: 18, justifyContent: "center", margin: "8px 0" }}>
-            {[0,1,2,3].map(i => <div key={i} style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid " + (kioskGateCode.length > i ? "#e52240" : "#3a3a3a"), background: kioskGateCode.length > i ? "#e52240" : "transparent" }} />)}
-          </div>
-          {kioskErr && <div style={{ fontSize: 15, fontWeight: 700, color: "#ff8496" }}>{kioskErr}</div>}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, width: 340 }}>
-            {["1","2","3","4","5","6","7","8","9","","0","del"].map((k,i) => (
-              <button key={i} disabled={!k} onClick={() => {
-                if (k === "del") { setKioskGateCode(c => c.slice(0, -1)); setKioskErr(""); return; }
-                const next = kioskGateCode + k;
-                setKioskGateCode(next);
-                if (next.length >= 4) {
-                  sb.rpc("verify_access_code", { p_code: next }).then(({ data }) => {
-                    if (data === "admin") { saveSession("drc_kiosk_session", { code: next }); setKioskUnlocked(true); setVerifiedCode(next); setRole("admin"); setKioskGateCode(""); }
-                    else { setKioskErr("Wrong passcode. Ask an admin to set it up."); setKioskGateCode(""); }
-                  });
-                }
-              }} style={{ minHeight: 74, fontSize: 28, fontWeight: 800, borderRadius: 6, cursor: k ? "pointer" : "default", background: k ? "#121212" : "transparent", border: "1px solid " + (k ? "#232323" : "transparent"), color: "#fff" }}>{k === "del" ? "⌫" : k}</button>
-            ))}
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#5a5a5a", letterSpacing: ".08em" }}>Admin code only — captains can't unlock kiosk mode</div>
-          <button onClick={() => setView("captain")} style={{ marginTop: 8, background: "none", border: "none", color: "#6a6a6a", fontSize: 13, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: 0 }}>← Back</button>
-        </div>
-      );
-    }
 
     if (kioskResult) {
       return (
@@ -1985,7 +1891,7 @@ function App() {
             </div>
             <div style={{ fontSize: 18, fontWeight: 600, color: "#6a6a6a", lineHeight: 1.6 }}>{(() => { const next = MILESTONES.find(n => n > kioskResult.runs); return next ? "Next milestone at " + next + " runs." : "All milestones earned."; })()}</div>
           </div>
-          <button onClick={() => { localStorage.removeItem("drc_kiosk_session"); setKioskUnlocked(false); setVerifiedCode(null); setRole(null); setKioskResult(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "0 44px 36px", display: "block" }}>Lock</button>
+          <button onClick={() => { setKioskResult(null); signOut(); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "0 44px 36px", display: "block" }}>Sign out</button>
         </div>
       );
     }
@@ -2008,7 +1914,7 @@ function App() {
         <div style={{ width: "100%", maxWidth: 420 }}><CameraScanner onDetect={kioskHandleScan} onClose={() => {}} /></div>
 
         <div style={{ fontSize: 17, fontWeight: 600, color: "#7a7a7a", lineHeight: 1.6 }}>{inSet.size} checked in · {ev ? ev.name : "—"}</div>
-        <button onClick={() => { localStorage.removeItem("drc_kiosk_session"); setKioskUnlocked(false); setVerifiedCode(null); setRole(null); }} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Lock</button>
+        <button onClick={signOut} style={{ background: "none", border: "none", color: "#5a5a5a", fontSize: 13, fontWeight: 800, letterSpacing: ".16em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0" }}>Sign out</button>
       </div>
     );
   }
