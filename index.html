@@ -955,10 +955,20 @@ function App() {
     setMembershipSyncMsg("");
     setMembershipSyncing(true);
     const { error } = await sb.rpc("admin_sync_membership_now", { p_code: verifiedCode });
+    if (error) {
+      setMembershipSyncing(false);
+      return setMembershipSyncMsg("Sync failed — check you're using the current admin code and that a club ID is set.");
+    }
+    const { data } = await sb.rpc("get_membership_sync_status");
     setMembershipSyncing(false);
-    if (error) return setMembershipSyncMsg("Sync failed — check you're using the current admin code and that a club ID is set.");
     await refreshAll();
-    setMembershipSyncMsg("Sync done. Check a member's Members tab or the runner list to confirm it worked.");
+    const s = data?.[0];
+    if (!s) return setMembershipSyncMsg("Sync ran but no status came back.");
+    if (s.last_sync_error) {
+      setMembershipSyncMsg("Issue: " + s.last_sync_error + (s.last_sync_raw_sample ? " — sample record: " + JSON.stringify(s.last_sync_raw_sample) : ""));
+    } else {
+      setMembershipSyncMsg("Sync done — matched " + s.last_sync_matched + " runner" + (s.last_sync_matched === 1 ? "" : "s") + " to active memberships.");
+    }
   }
 
   async function recalcStreaksNow() {
