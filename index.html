@@ -268,6 +268,10 @@ function App() {
   const [streakMsg, setStreakMsg] = useState("");
   const [runsignupStatus, setRunsignupStatus] = useState(null);
   const [runsignupMsg, setRunsignupMsg] = useState("");
+  const [clubIdInput, setClubIdInput] = useState("");
+  const [clubIdMsg, setClubIdMsg] = useState("");
+  const [membershipSyncing, setMembershipSyncing] = useState(false);
+  const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
   const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
   const [editingEventId, setEditingEventId] = useState(null);
@@ -348,6 +352,16 @@ function App() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  // Keep the signed-in runner's own record in sync with Realtime-driven
+  // updates to allRunners — otherwise something like a membership sync
+  // (which changes is_active_member on the Members tab's gate) wouldn't
+  // show up until the next full sign-in.
+  useEffect(() => {
+    if (!me) return;
+    const fresh = allRunners.find(r => r.id === me.id);
+    if (fresh && JSON.stringify(fresh) !== JSON.stringify(me)) setMe(fresh);
+  }, [allRunners]);
 
   // Restore an unlocked captain/admin or kiosk session, if one was saved.
   // Decryption is async, so this briefly shows the landing screen before
@@ -929,6 +943,24 @@ function App() {
     URL.revokeObjectURL(a.href);
   }
 
+  async function saveClubId() {
+    setClubIdMsg("");
+    if (!clubIdInput.trim()) return setClubIdMsg("Enter a club ID.");
+    const { error } = await sb.rpc("admin_set_club_id", { p_code: verifiedCode, p_club_id: clubIdInput.trim() });
+    if (error) return setClubIdMsg("Couldn't save — check you're using the current admin code.");
+    setClubIdMsg("Saved.");
+  }
+
+  async function syncMembershipNow() {
+    setMembershipSyncMsg("");
+    setMembershipSyncing(true);
+    const { error } = await sb.rpc("admin_sync_membership_now", { p_code: verifiedCode });
+    setMembershipSyncing(false);
+    if (error) return setMembershipSyncMsg("Sync failed — check you're using the current admin code and that a club ID is set.");
+    await refreshAll();
+    setMembershipSyncMsg("Sync done. Check a member's Members tab or the runner list to confirm it worked.");
+  }
+
   async function recalcStreaksNow() {
     setRecalculating(true); setStreakMsg("");
     const { error } = await sb.rpc("admin_recalculate_streaks", { p_code: verifiedCode });
@@ -1392,8 +1424,28 @@ function App() {
           </div>
         )}
 
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
-          {["pass","profile","runs"].map(t => (
+        {tab === "members" && (
+          <div>
+            <h2 style={{ margin: "0 0 18px", fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase" }}>Members</h2>
+            <div className="card">
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 12 }}>DRC MEMBERSHIP</div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: "#8a8a8a" }}>Status</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#4ade80" }}>ACTIVE</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: "#8a8a8a" }}>Plan</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{me.membership_type || "—"}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, color: "#8a8a8a" }}>Member since</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{me.member_since ? new Date(me.member_since + "T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "—"}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+          {(me.is_active_member ? ["pass","profile","runs","members"] : ["pass","profile","runs"]).map(t => (
             <button key={t} onClick={() => { switchTab(t); setEditingField(null); }} style={{ flex: 1, minHeight: 56, background: tab===t ? "#e52240" : "transparent", border: "none", color: tab===t ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
           ))}
         </div>
@@ -1709,6 +1761,19 @@ function App() {
                 </>
               )}
               {runsignupMsg && <div className={runsignupMsg.includes("Connected") ? "ok" : "err"} style={{ marginTop: 10 }}>{runsignupMsg}</div>}
+
+              {runsignupStatus?.connected && (
+                <div style={{ marginTop: 16 }}>
+                  <label className="label">CLUB ID <span style={{ color: "#5a5a5a" }}>(changes yearly, update here when it does)</span></label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <input className="field" value={clubIdInput} onChange={e => setClubIdInput(e.target.value)} placeholder="e.g. 00464211" />
+                    <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveClubId}>Save</button>
+                  </div>
+                  {clubIdMsg && <div className={clubIdMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{clubIdMsg}</div>}
+                  <button className="btn-ghost" disabled={membershipSyncing} onClick={syncMembershipNow}>{membershipSyncing ? "Syncing… (can take up to 10s)" : "Sync membership now"}</button>
+                  {membershipSyncMsg && <div className={membershipSyncMsg.includes("done") ? "ok" : "err"} style={{ marginTop: 10 }}>{membershipSyncMsg}</div>}
+                </div>
+              )}
             </div>
           </div>
         )}
