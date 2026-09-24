@@ -961,19 +961,35 @@ function App() {
     setApiRegMsg("Saved.");
   }
 
-  async function syncMembershipNow() {
+  async function startMembershipSync() {
     setMembershipSyncMsg("");
     setMembershipSyncing(true);
-    const { error } = await sb.rpc("admin_sync_membership_now", { p_code: verifiedCode });
+    const { error } = await sb.rpc("admin_start_membership_sync", { p_code: verifiedCode });
     if (error) {
       setMembershipSyncing(false);
-      return setMembershipSyncMsg("Sync failed — check you're using the current admin code and that a club ID is set.");
+      return setMembershipSyncMsg("Couldn't start — check you're using the current admin code and that a club ID and API Caller Reg token are set.");
+    }
+    setMembershipSyncMsg("Started — checking automatically in 30 seconds. You can also tap Check now sooner if you like.");
+    setTimeout(checkMembershipSync, 30000);
+  }
+
+  async function checkMembershipSync() {
+    setMembershipSyncMsg("Checking…");
+    const { error } = await sb.rpc("admin_check_membership_sync", { p_code: verifiedCode });
+    if (error) {
+      setMembershipSyncing(false);
+      return setMembershipSyncMsg("Couldn't check — check you're using the current admin code.");
     }
     const { data } = await sb.rpc("get_membership_sync_status");
+    const s = data?.[0];
+    if (!s) { setMembershipSyncing(false); return setMembershipSyncMsg("Checked, but no status came back."); }
+    if (s.pending_sync_request_id) {
+      setMembershipSyncMsg("Still waiting on RunSignUp — checking again in 15 seconds.");
+      setTimeout(checkMembershipSync, 15000);
+      return;
+    }
     setMembershipSyncing(false);
     await refreshAll();
-    const s = data?.[0];
-    if (!s) return setMembershipSyncMsg("Sync ran but no status came back.");
     if (s.last_sync_error) {
       setMembershipSyncMsg("Issue: " + s.last_sync_error + (s.last_sync_raw_sample ? " — sample record: " + JSON.stringify(s.last_sync_raw_sample) : ""));
     } else {
@@ -1804,7 +1820,7 @@ function App() {
                   {apiRegMsg && <div className={apiRegMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{apiRegMsg}</div>}
                   <div style={{ fontSize: 11, fontWeight: 500, color: "#5a5a5a", lineHeight: 1.5, marginBottom: 12 }}>The X-RSU-API-REG-SECRET itself is never entered here — that gets stored directly in Supabase Vault via SQL, not through the app.</div>
 
-                  <button className="btn-ghost" disabled={membershipSyncing} onClick={syncMembershipNow}>{membershipSyncing ? "Syncing… (can take up to 10s)" : "Sync membership now"}</button>
+                  <button className="btn-ghost" disabled={membershipSyncing} onClick={startMembershipSync}>{membershipSyncing ? "Working…" : "Sync membership now"}</button>
                   {membershipSyncMsg && <div className={membershipSyncMsg.includes("done") ? "ok" : "err"} style={{ marginTop: 10 }}>{membershipSyncMsg}</div>}
                 </div>
               )}
