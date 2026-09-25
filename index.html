@@ -1252,11 +1252,8 @@ function App() {
             <input className="field" type="email" placeholder="you@email.com" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
             <input className="field" type="password" placeholder="Password (optional)" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
             {authErr && <div className="err">{authErr}</div>}
-            {authPassword ? (
-              <button className="btn-primary" disabled={loading} onClick={signInWithPassword}>{loading ? "Signing in…" : "Sign in with password"}</button>
-            ) : (
-              <button className="btn-primary" disabled={loading} onClick={sendMagicLink}>{loading ? "Sending…" : "Email me a sign-in link"}</button>
-            )}
+            <button className="btn-primary" disabled={loading} onClick={signInWithPassword}>{loading ? "Signing in…" : "Sign in with password"}</button>
+            <button className="btn-ghost" disabled={loading} onClick={sendMagicLink}>{loading ? "Sending…" : "Or email me a sign-in link instead"}</button>
           </div>
         ) : (
           <div className="ok">Check your email for a sign-in link — it'll bring you right back here.</div>
