@@ -213,6 +213,7 @@ function App() {
   // The signed-in account's own app_role — 'runner' | 'pacer' |
   // 'flight_crew' | 'captain' | 'admin' | null before sign-in.
   const [role, setRole] = useState(null);
+  const [myRaceRegs, setMyRaceRegs] = useState([]);
   const [captainTab, setCaptainTab] = useState(() => localStorage.getItem("drc_last_captain_tab") || "checkin");
   const [query, setQuery] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -237,6 +238,11 @@ function App() {
   const [usersMsg, setUsersMsg] = useState("");
   const [usersExpanded, setUsersExpanded] = useState(false);
   const [pendingRoleChange, setPendingRoleChange] = useState(null);
+  const [raceSyncExpanded, setRaceSyncExpanded] = useState(false);
+  const [raceIdInput, setRaceIdInput] = useState("");
+  const [raceIdMsg, setRaceIdMsg] = useState("");
+  const [raceSyncing, setRaceSyncing] = useState(false);
+  const [raceSyncMsg, setRaceSyncMsg] = useState("");
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
@@ -760,6 +766,7 @@ function App() {
     setMe(runner);
     setRole(runner.app_role || "runner");
     setView("member"); setTab("pass");
+    sb.from("race_registrations").select("*").then(({ data }) => setMyRaceRegs(data || []));
   }
 
   // Shared bottom nav — used by both the member view and the captain/
@@ -933,6 +940,24 @@ function App() {
     const { error } = await sb.rpc("admin_set_runsignup_org_key", { p_key: orgKeyInput.trim() });
     if (error) return setOrgKeyMsg("Couldn't save — check you're using the current admin code.");
     setOrgKeyMsg("Saved.");
+  }
+
+  async function saveRaceId() {
+    setRaceIdMsg("");
+    if (!raceIdInput.trim()) return setRaceIdMsg("Enter a race ID.");
+    const { error } = await sb.rpc("admin_set_race_id", { p_race_id: raceIdInput.trim() });
+    if (error) return setRaceIdMsg("Couldn't save — try again.");
+    setRaceIdMsg("Saved.");
+  }
+
+  async function syncRaceNow() {
+    setRaceSyncMsg("");
+    setRaceSyncing(true);
+    const { data, error } = await sb.functions.invoke("runsignup-race-sync");
+    setRaceSyncing(false);
+    if (error) return setRaceSyncMsg("Sync failed — check the race ID and RunSignUp setup, then try again.");
+    if (data?.error) return setRaceSyncMsg("Issue: " + data.error);
+    setRaceSyncMsg(`Synced — matched ${data.matched} of ${data.totalParticipants} registrants.`);
   }
 
   async function saveMemberSince() {
@@ -1406,6 +1431,19 @@ function App() {
           <div>
             <h2 style={{ margin: "0 0 6px", fontSize: 30, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.98 }}>This week</h2>
             <p style={{ margin: "0 0 22px", fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6 }}>RSVP so captains know the headcount. Your QR still checks you in either way.</p>
+            {myRaceRegs.map(reg => (
+              <div key={reg.id} style={{ border: "1px solid #2a2a2a", background: "#111", padding: "16px 18px", marginBottom: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".15em", color: "#e52240", marginBottom: 8 }}>YOU'RE REGISTERED</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 4 }}>District 19</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#8a8a8a", marginBottom: reg.bib_num ? 10 : 0 }}>{reg.event_date ? new Date(reg.event_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : ""}{reg.event_date && reg.event_name ? " · " : ""}{reg.event_name || ""}</div>
+                {reg.bib_num && (
+                  <div>
+                    <div style={{ fontSize: 9, color: "#5a5a5a", letterSpacing: ".05em" }}>BIB</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#d4d4d4" }}>{reg.bib_num}</div>
+                  </div>
+                )}
+              </div>
+            ))}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {sortedEvents.map(x => {
                 const on = rsvpMap[x.id]?.has(me.id);
@@ -1802,6 +1840,27 @@ function App() {
                 </div>
                 {memberSinceMsg && <div className={memberSinceMsg.includes("Saved") ? "ok" : "err"}>{memberSinceMsg}</div>}
               </div>
+                </>
+              )}
+            </div>
+
+            <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
+            <div>
+              <button onClick={() => setRaceSyncExpanded(e => !e)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: raceSyncExpanded ? 12 : 0 }}>
+                <span className="label" style={{ marginBottom: 0 }}>RACE SYNC</span>
+                <span style={{ color: "#6a6a6a", fontSize: 12 }}>{raceSyncExpanded ? "▴" : "▾"}</span>
+              </button>
+
+              {raceSyncExpanded && (
+                <>
+                  <label className="label">RACE ID <span style={{ color: "#5a5a5a" }}>(from the race dashboard URL)</span></label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <input className="field" value={raceIdInput} onChange={e => setRaceIdInput(e.target.value)} placeholder="e.g. 98815" />
+                    <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={saveRaceId}>Save</button>
+                  </div>
+                  {raceIdMsg && <div className={raceIdMsg.includes("Saved") ? "ok" : "err"} style={{ marginBottom: 12 }}>{raceIdMsg}</div>}
+                  <button className="btn-ghost" disabled={raceSyncing} onClick={syncRaceNow}>{raceSyncing ? "Syncing…" : "Sync race registrations now"}</button>
+                  {raceSyncMsg && <div className={raceSyncMsg.includes("Synced") ? "ok" : "err"} style={{ marginTop: 10 }}>{raceSyncMsg}</div>}
                 </>
               )}
             </div>
