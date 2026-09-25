@@ -202,6 +202,7 @@ function App() {
   const [authSent, setAuthSent] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [needsProfile, setNeedsProfile] = useState(false);
+  const [claimedRunnerId, setClaimedRunnerId] = useState(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", smsOptIn: false, pace: "", waiver: false, password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -379,6 +380,22 @@ function App() {
       const runners = await refreshAll();
       const mine = runners.find(r => r.auth_user_id === session.user.id);
       if (mine) { routeAfterSignIn(mine); return; }
+
+      // Were they quick-checked-in as a guest before ever signing in
+      // for real? Claim that existing row instead of creating a
+      // duplicate — this is what makes the guest profile-completion
+      // reminder email actually lead somewhere sensible. They still
+      // need to fill in their real details, so this goes to the same
+      // profile-completion screen as a brand-new signup, just updating
+      // their existing row (and its check-in history) instead of
+      // inserting a new one.
+      const { data: claimed } = await sb.rpc("claim_guest_profile");
+      if (claimed) {
+        setAllRunners(rs => rs.map(r => r.id === claimed.id ? claimed : r));
+        setClaimedRunnerId(claimed.id);
+        setNeedsProfile(true); setView("completeProfile");
+        return;
+      }
 
       // Came from "Create my pass" — we already have their details saved
       // locally from before the magic-link round trip, so finish signup
@@ -836,25 +853,31 @@ function App() {
     if (!form.waiver) return setError("You'll need to agree to the waiver to run with us.");
     setLoading(true);
     const full = form.firstName.trim() + " " + form.lastName.trim();
-    const { data, error } = await sb.from("runners").insert({
-      auth_user_id: session.user.id,
+    const details = {
       first_name: form.firstName.trim(),
       last_name: form.lastName.trim(),
-      email: session.user.email,
       phone: form.phone.trim(),
       sms_opt_in: form.smsOptIn,
       sms_opt_in_at: form.smsOptIn ? new Date().toISOString() : null,
       pace: form.pace,
-      dist: "Long Distance",
       waiver_signed_at: new Date().toISOString(),
-      code: genCode(full + session.user.email),
-      joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
-    }).select().single();
+    };
+    const { data, error } = claimedRunnerId
+      ? await sb.from("runners").update({ ...details, is_guest: false }).eq("id", claimedRunnerId).select().single()
+      : await sb.from("runners").insert({
+          ...details,
+          auth_user_id: session.user.id,
+          email: session.user.email,
+          dist: "Long Distance",
+          code: genCode(full + session.user.email),
+          joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
+        }).select().single();
     setLoading(false);
     if (error) return setError("Something went wrong creating your pass. Try again.");
     if (form.password) await sb.auth.updateUser({ password: form.password });
     setMe(data);
-    setAllRunners(r => r.concat([data]));
+    setAllRunners(r => claimedRunnerId ? r.map(x => x.id === data.id ? data : x) : r.concat([data]));
+    setClaimedRunnerId(null);
     setView("member"); setTab("pass"); setNeedsProfile(false);
   }
 
