@@ -266,6 +266,7 @@ function App() {
   const [newLocationName, setNewLocationName] = useState("");
   const [newLocationAddress, setNewLocationAddress] = useState("");
   const [kioskResult, setKioskResult] = useState(null);
+  const [expandedBuckets, setExpandedBuckets] = useState({});
 
   async function refreshAll() {
     const [{ data: ev }, { data: rs }, { data: ci }, { data: runners }, { data: locs }] = await Promise.all([
@@ -614,7 +615,46 @@ function App() {
     });
   }, [events]);
 
+  // Groups past events for the admin Events tab: events still within
+  // the current Monday-start week stay inline (just darkened) rather
+  // than being rolled up — they only move into "LAST WEEK" once the
+  // week itself has actually ended.
+  const eventGroups = useMemo(() => {
+    const now = new Date();
+    const daysSinceMonday = (now.getDay() + 6) % 7;
+    const startOfThisWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday);
+    const startOfLastWeek = new Date(startOfThisWeek);
+    startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const upcoming = [];
+    const thisWeekPast = [];
+    const bucketMap = {};
+
+    for (const x of sortedEvents) {
+      if (!eventIsPast(x)) { upcoming.push(x); continue; }
+      const d = x.event_date ? new Date(x.event_date + "T00:00:00") : null;
+      if (!d || d >= startOfThisWeek) { thisWeekPast.push(x); continue; }
+      let key, label, sortKey;
+      if (d >= startOfLastWeek) {
+        key = "last-week"; label = "LAST WEEK"; sortKey = startOfLastWeek.getTime();
+      } else if (d >= startOfThisMonth) {
+        key = "earlier-this-month"; label = "EARLIER THIS MONTH"; sortKey = startOfThisMonth.getTime();
+      } else {
+        key = d.getFullYear() + "-" + d.getMonth();
+        label = d.toLocaleDateString(undefined, { month: "long", year: "numeric" }).toUpperCase();
+        sortKey = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      }
+      if (!bucketMap[key]) bucketMap[key] = { key, label, sortKey, events: [] };
+      bucketMap[key].events.push(x);
+    }
+
+    const buckets = Object.values(bucketMap).sort((a, b) => b.sortKey - a.sortKey);
+    return { upcoming, thisWeekPast, buckets };
+  }, [sortedEvents]);
+
   const ev = sortedEvents[eventIdx] || null;
+
 
   // The member Pass tab shows whatever event is actually coming up next
   // by real date/time — independent of whichever event a captain has
@@ -1735,9 +1775,9 @@ function App() {
         {captainTab === "events" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>ALL EVENTS</div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>UPCOMING</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {sortedEvents.map(x => (
+                {eventGroups.upcoming.map(x => (
                   <div key={x.id} style={{ border: "1px solid #232323", padding: "14px 16px", opacity: x.cancelled ? 0.55 : 1 }}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
                       <span style={{ fontSize: 15, fontWeight: 800, textTransform: "uppercase" }}>{x.name}</span>
@@ -1767,6 +1807,41 @@ function App() {
                 ))}
               </div>
             </div>
+
+            {(eventGroups.thisWeekPast.length > 0 || eventGroups.buckets.length > 0) && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 12 }}>PAST EVENTS</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {eventGroups.thisWeekPast.map(x => (
+                    <div key={x.id} style={{ border: "1px solid #232323", padding: "12px 14px", opacity: 0.5 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", color: "#fff", marginBottom: 3 }}>{x.name}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#8a8a8a", marginBottom: 10 }}>{eventDateLabel(x)} · {eventTimeLabel(x)} · {eventLocation(x, locations).name}</div>
+                      <button onClick={() => loadEventForm(x)} style={{ minHeight: 34, padding: "0 14px", cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a" }}>EDIT</button>
+                    </div>
+                  ))}
+
+                  {eventGroups.buckets.map(bucket => (
+                    <div key={bucket.key} style={{ border: "1px solid #232323" }}>
+                      <button onClick={() => setExpandedBuckets(e => ({ ...e, [bucket.key]: !e[bucket.key] }))} style={{ width: "100%", background: "none", border: "none", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", color: "#fff" }}>{bucket.label}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#6a6a6a" }}>{bucket.events.length} event{bucket.events.length === 1 ? "" : "s"} &nbsp;{expandedBuckets[bucket.key] ? "▴" : "▾"}</span>
+                      </button>
+                      {expandedBuckets[bucket.key] && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px 14px" }}>
+                          {bucket.events.map(x => (
+                            <div key={x.id} style={{ opacity: 0.5, borderTop: "1px solid #191919", paddingTop: 10 }}>
+                              <div style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", color: "#fff", marginBottom: 3 }}>{x.name}</div>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: "#8a8a8a", marginBottom: 10 }}>{eventDateLabel(x)} · {eventTimeLabel(x)} · {eventLocation(x, locations).name}</div>
+                              <button onClick={() => loadEventForm(x)} style={{ minHeight: 34, padding: "0 14px", cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a" }}>EDIT</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div style={{ height: 1, background: "#1e1e1e" }} />
 
