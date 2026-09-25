@@ -927,6 +927,11 @@ function App() {
     setManualRefreshing(false);
   }
 
+  async function captainRsvpFor(runnerId, eventId) {
+    setRsvpMap(m => { const s = new Set(m[eventId] || []); s.add(runnerId); return { ...m, [eventId]: s }; });
+    await sb.rpc("captain_rsvp_for", { p_runner_id: runnerId, p_event_id: eventId });
+  }
+
   async function checkIn(runnerId, eventId) {
     setCheckinMap(m => { const s = new Set(m[eventId] || []); s.add(runnerId); return { ...m, [eventId]: s }; });
     setAllRunners(rs => rs.map(r => r.id === runnerId ? { ...r, runs: r.runs + 1 } : r));
@@ -1785,8 +1790,20 @@ function App() {
 
             <input className="field" type="search" placeholder="Search all members" value={query} onChange={e => setQuery(e.target.value)} />
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {filteredRunners.slice(0, 40).map(r => {
+              {(query.trim() ? filteredRunners : filteredRunners.filter(r => rsvpSet.has(r.id))).slice(0, 40).map(r => {
                 const isIn = inSet.has(r.id);
+                const hasRsvp = rsvpSet.has(r.id);
+                if (!hasRsvp) {
+                  return (
+                    <button key={r.id} onClick={() => ev && captainRsvpFor(r.id, ev.id)} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 56, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #191919", color: "#fff", cursor: "pointer" }}>
+                      <span style={{ textAlign: "left" }}>
+                        <div style={{ fontSize: 15, fontWeight: 800 }}>{r.first_name} {r.last_name}</div>
+                        <div style={{ fontSize: 11, color: "#7a7a7a" }}>{r.pace} · {r.runs} runs</div>
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 900, padding: "6px 10px", alignSelf: "center", background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a" }}>RSVP</span>
+                    </button>
+                  );
+                }
                 return (
                   <button key={r.id} onClick={() => ev && (isIn ? undoCheckIn(r.id, ev.id) : checkIn(r.id, ev.id))} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 56, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #191919", color: "#fff", cursor: "pointer", opacity: isIn ? 0.55 : 1 }}>
                     <span style={{ textAlign: "left" }}>
