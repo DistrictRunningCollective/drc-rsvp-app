@@ -235,7 +235,7 @@ function App() {
   const [scanResult, setScanResult] = useState(null);
   const [scanMsg, setScanMsg] = useState("");
   const [showGuestForm, setShowGuestForm] = useState(false);
-  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
   const [streakMsg, setStreakMsg] = useState("");
   const [runsignupStatus, setRunsignupStatus] = useState(null);
   const [runsignupMsg, setRunsignupMsg] = useState("");
@@ -937,13 +937,16 @@ function App() {
     setCheckinMap(m => { const s = new Set(m[eventId] || []); s.delete(runnerId); return { ...m, [eventId]: s }; });
     await sb.rpc("captain_undo_check_in", { p_runner_id: runnerId, p_event_id: eventId });
   }
+  const [guestErr, setGuestErr] = useState("");
   async function addGuestAndCheckIn() {
-    const name = guestName.trim();
-    if (!name || !ev) return;
-    const { data: newId, error } = await sb.rpc("captain_add_guest", { p_name: name });
-    if (error) return;
+    setGuestErr("");
+    const email = guestEmail.trim();
+    if (!ev) return;
+    if (!isEmail(email)) return setGuestErr("Enter a valid email.");
+    const { data: newId, error } = await sb.rpc("captain_add_guest", { p_email: email });
+    if (error) return setGuestErr("Couldn't check them in — try again.");
     await refreshAll();
-    setGuestName(""); setShowGuestForm(false);
+    setGuestEmail(""); setShowGuestForm(false);
     checkIn(newId, ev.id);
   }
   async function toggleRsvp(eventId) {
@@ -1767,11 +1770,15 @@ function App() {
             {scanMsg && <div className="err">{scanMsg}</div>}
 
             <div>
-              <button className="btn-ghost" onClick={() => setShowGuestForm(s => !s)} style={{ borderStyle: "dashed", color: "#8a8a8a" }}>{showGuestForm ? "CANCEL GUEST CHECK-IN" : "+ CHECK IN A GUEST (NO PASS)"}</button>
+              <button className="btn-ghost" onClick={() => { setShowGuestForm(s => !s); setGuestErr(""); }} style={{ borderStyle: "dashed", color: "#8a8a8a" }}>{showGuestForm ? "CANCEL QUICK CHECK-IN" : "+ QUICK CHECK-IN (NO PASS)"}</button>
               {showGuestForm && (
-                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <input className="field" placeholder="Guest's name" value={guestName} onChange={e => setGuestName(e.target.value)} />
-                  <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={addGuestAndCheckIn}>Add</button>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#6a6a6a", marginBottom: 8, lineHeight: 1.5 }}>For checking someone in fast without their pass — an existing email checks that person in directly, a new one creates a guest record.</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input className="field" type="email" placeholder="Their email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)} />
+                    <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={addGuestAndCheckIn}>Add</button>
+                  </div>
+                  {guestErr && <div className="err" style={{ marginTop: 8 }}>{guestErr}</div>}
                 </div>
               )}
             </div>
