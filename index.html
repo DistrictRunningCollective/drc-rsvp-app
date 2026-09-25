@@ -210,14 +210,9 @@ function App() {
   const [resignError, setResignError] = useState("");
   const [resignLoading, setResignLoading] = useState(false);
 
-  // captain/admin gate — the CODE never lives in this file; we only ever
-  // hold the role string the server returned, plus the code the person
-  // typed (kept in memory only, re-verified server-side on every action).
-  // verifiedCode now stays null in practice — there's no more passcode
-  // entry UI — but every RPC still accepts it as a backend fallback
-  // until that's fully removed later.
-  const [role, setRole] = useState(null);        // 'runner' | 'flight_crew' | 'captain' | 'admin' | null
-  const [verifiedCode, setVerifiedCode] = useState(null);
+  // The signed-in account's own app_role — 'runner' | 'pacer' |
+  // 'flight_crew' | 'captain' | 'admin' | null before sign-in.
+  const [role, setRole] = useState(null);
   const [captainTab, setCaptainTab] = useState(() => localStorage.getItem("drc_last_captain_tab") || "checkin");
   const [query, setQuery] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -225,9 +220,6 @@ function App() {
   const [scanMsg, setScanMsg] = useState("");
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [guestName, setGuestName] = useState("");
-  const [settingsMsg, setSettingsMsg] = useState("");
-  const [newCaptainCode, setNewCaptainCode] = useState("");
-  const [newAdminCode, setNewAdminCode] = useState("");
   const [streakMsg, setStreakMsg] = useState("");
   const [runsignupStatus, setRunsignupStatus] = useState(null);
   const [runsignupMsg, setRunsignupMsg] = useState("");
@@ -243,6 +235,7 @@ function App() {
   const [memberSinceMsg, setMemberSinceMsg] = useState("");
   const [usersSearch, setUsersSearch] = useState("");
   const [usersMsg, setUsersMsg] = useState("");
+  const [usersExpanded, setUsersExpanded] = useState(false);
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
@@ -806,17 +799,17 @@ function App() {
   async function checkIn(runnerId, eventId) {
     setCheckinMap(m => { const s = new Set(m[eventId] || []); s.add(runnerId); return { ...m, [eventId]: s }; });
     setAllRunners(rs => rs.map(r => r.id === runnerId ? { ...r, runs: r.runs + 1 } : r));
-    const { error } = await sb.rpc("captain_check_in", { p_code: verifiedCode, p_runner_id: runnerId, p_event_id: eventId });
+    const { error } = await sb.rpc("captain_check_in", { p_runner_id: runnerId, p_event_id: eventId });
     if (error) refreshAll();
   }
   async function undoCheckIn(runnerId, eventId) {
     setCheckinMap(m => { const s = new Set(m[eventId] || []); s.delete(runnerId); return { ...m, [eventId]: s }; });
-    await sb.rpc("captain_undo_check_in", { p_code: verifiedCode, p_runner_id: runnerId, p_event_id: eventId });
+    await sb.rpc("captain_undo_check_in", { p_runner_id: runnerId, p_event_id: eventId });
   }
   async function addGuestAndCheckIn() {
     const name = guestName.trim();
     if (!name || !ev) return;
-    const { data: newId, error } = await sb.rpc("captain_add_guest", { p_code: verifiedCode, p_name: name });
+    const { data: newId, error } = await sb.rpc("captain_add_guest", { p_name: name });
     if (error) return;
     await refreshAll();
     setGuestName(""); setShowGuestForm(false);
@@ -843,16 +836,6 @@ function App() {
     setScanResult(null);
   }
 
-  async function saveAccessCode(kind) {
-    const val = kind === "captain" ? newCaptainCode : newAdminCode;
-    if (!val || val.length < 4) return setSettingsMsg("Code must be at least 4 characters.");
-    const { error } = await sb.rpc("admin_set_access_code", { p_code: verifiedCode, p_kind: kind, p_new_code: val });
-    if (error) return setSettingsMsg("Couldn't update — check you're using the current admin code.");
-    setSettingsMsg(kind === "captain" ? "Captain code updated." : "Admin code updated. Use it next time you unlock.");
-    if (kind === "admin") setVerifiedCode(val);
-    setNewCaptainCode(""); setNewAdminCode("");
-  }
-
   function setEventField(patch) {
     setEventForm(f => ({ ...f, ...patch }));
   }
@@ -870,7 +853,7 @@ function App() {
     setEventSaveMsg("");
     const id = editingEventId || (eventForm.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) + "-" + Date.now().toString(36));
     const { error } = await sb.rpc("admin_save_event", {
-      p_code: verifiedCode, p_id: id, p_name: eventForm.name,
+      p_id: id, p_name: eventForm.name,
       p_event_date: eventForm.event_date || null, p_event_time: eventForm.event_time || null,
       p_event_end_time: eventForm.event_end_time || null,
       p_location_id: eventForm.location_id || null, p_notes: eventForm.notes,
@@ -883,7 +866,7 @@ function App() {
   }
   async function addLocation() {
     if (!newLocationName.trim() || !newLocationAddress.trim()) return;
-    const { data: newId, error } = await sb.rpc("admin_add_location", { p_code: verifiedCode, p_name: newLocationName.trim(), p_address: newLocationAddress.trim() });
+    const { data: newId, error } = await sb.rpc("admin_add_location", { p_name: newLocationName.trim(), p_address: newLocationAddress.trim() });
     if (error) return;
     await refreshAll();
     setEventField({ location_id: newId });
@@ -891,15 +874,15 @@ function App() {
   }
   async function deleteEvent(id) {
     setDeleteConfirmId(null);
-    await sb.rpc("admin_delete_event", { p_code: verifiedCode, p_event_id: id });
+    await sb.rpc("admin_delete_event", { p_event_id: id });
     refreshAll();
   }
   async function toggleEventCancel(id) {
-    await sb.rpc("admin_toggle_event_flag", { p_code: verifiedCode, p_event_id: id, p_flag: "cancelled" });
+    await sb.rpc("admin_toggle_event_flag", { p_event_id: id, p_flag: "cancelled" });
     refreshAll();
   }
   async function toggleEventHold(id) {
-    await sb.rpc("admin_toggle_event_flag", { p_code: verifiedCode, p_event_id: id, p_flag: "hold" });
+    await sb.rpc("admin_toggle_event_flag", { p_event_id: id, p_flag: "hold" });
     refreshAll();
   }
 
@@ -930,7 +913,7 @@ function App() {
   async function saveClubId() {
     setClubIdMsg("");
     if (!clubIdInput.trim()) return setClubIdMsg("Enter a club ID.");
-    const { error } = await sb.rpc("admin_set_club_id", { p_code: verifiedCode, p_club_id: clubIdInput.trim() });
+    const { error } = await sb.rpc("admin_set_club_id", { p_club_id: clubIdInput.trim() });
     if (error) return setClubIdMsg("Couldn't save — check you're using the current admin code.");
     setClubIdMsg("Saved.");
   }
@@ -938,7 +921,7 @@ function App() {
   async function saveApiReg() {
     setApiRegMsg("");
     if (!apiRegInput.trim()) return setApiRegMsg("Enter the API Caller Reg token.");
-    const { error } = await sb.rpc("admin_set_runsignup_api_reg", { p_code: verifiedCode, p_api_reg: apiRegInput.trim() });
+    const { error } = await sb.rpc("admin_set_runsignup_api_reg", { p_api_reg: apiRegInput.trim() });
     if (error) return setApiRegMsg("Couldn't save — check you're using the current admin code.");
     setApiRegMsg("Saved.");
   }
@@ -946,7 +929,7 @@ function App() {
   async function saveOrgKey() {
     setOrgKeyMsg("");
     if (!orgKeyInput.trim()) return setOrgKeyMsg("Enter the org API key.");
-    const { error } = await sb.rpc("admin_set_runsignup_org_key", { p_code: verifiedCode, p_key: orgKeyInput.trim() });
+    const { error } = await sb.rpc("admin_set_runsignup_org_key", { p_key: orgKeyInput.trim() });
     if (error) return setOrgKeyMsg("Couldn't save — check you're using the current admin code.");
     setOrgKeyMsg("Saved.");
   }
@@ -955,25 +938,27 @@ function App() {
     setMemberSinceMsg("");
     if (!isEmail(memberSinceEmail)) return setMemberSinceMsg("Enter a valid email.");
     if (!memberSinceDate) return setMemberSinceMsg("Pick a date.");
-    const { error } = await sb.rpc("admin_set_member_since", { p_code: verifiedCode, p_email: memberSinceEmail.trim(), p_date: memberSinceDate });
+    const { error } = await sb.rpc("admin_set_member_since", { p_email: memberSinceEmail.trim(), p_date: memberSinceDate });
     if (error) return setMemberSinceMsg("Couldn't save — check the email matches a runner and you're using the current admin code.");
     await refreshAll();
     setMemberSinceMsg("Saved. The sync won't overwrite this going forward.");
     setMemberSinceEmail(""); setMemberSinceDate("");
   }
 
-  async function setUserRole(runnerId, role) {
+  async function setUserRole(runner, role) {
     setUsersMsg("");
-    const { error } = await sb.rpc("admin_set_app_role", { p_code: verifiedCode, p_runner_id: runnerId, p_role: role });
-    if (error) return setUsersMsg("Couldn't update — check you're using the current admin code.");
-    setAllRunners(rs => rs.map(r => r.id === runnerId ? { ...r, app_role: role } : r));
+    const roleLabel = { runner: "Runner", pacer: "Pacer", flight_crew: "Flight Crew", captain: "Captain", admin: "Admin" }[role] || role;
+    if (!window.confirm(`Change ${runner.first_name} ${runner.last_name}'s role to ${roleLabel}?`)) return;
+    const { error } = await sb.rpc("admin_set_app_role", { p_runner_id: runner.id, p_role: role });
+    if (error) return setUsersMsg("Couldn't update — try again.");
+    setAllRunners(rs => rs.map(r => r.id === runner.id ? { ...r, app_role: role } : r));
     setUsersMsg("Updated.");
   }
 
   async function startMembershipSync() {
     setMembershipSyncMsg("");
     setMembershipSyncing(true);
-    const { error } = await sb.rpc("admin_start_membership_sync", { p_code: verifiedCode });
+    const { error } = await sb.rpc("admin_start_membership_sync", {});
     if (error) {
       setMembershipSyncing(false);
       return setMembershipSyncMsg("Couldn't start — check you're using the current admin code and that a club ID and API Caller Reg token are set.");
@@ -1008,7 +993,7 @@ function App() {
 
   async function recalcStreaksNow() {
     setRecalculating(true); setStreakMsg("");
-    const { error } = await sb.rpc("admin_recalculate_streaks", { p_code: verifiedCode });
+    const { error } = await sb.rpc("admin_recalculate_streaks", {});
     setRecalculating(false);
     if (error) return setStreakMsg("Couldn't recalculate — check you're using the current admin code.");
     await refreshAll();
@@ -1541,7 +1526,6 @@ function App() {
           {role === "admin" && <>
             <button onClick={() => switchCaptainTab("dashboard")} style={{ flex: 1, minHeight: 46, background: captainTab==="dashboard" ? "#e52240" : "transparent", border: "none", color: captainTab==="dashboard" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>DASHBOARD</button>
             <button onClick={() => switchCaptainTab("events")} style={{ flex: 1, minHeight: 46, background: captainTab==="events" ? "#e52240" : "transparent", border: "none", color: captainTab==="events" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>EVENTS</button>
-            <button onClick={() => switchCaptainTab("users")} style={{ flex: 1, minHeight: 46, background: captainTab==="users" ? "#e52240" : "transparent", border: "none", color: captainTab==="users" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>USERS</button>
             <button onClick={() => switchCaptainTab("settings")} style={{ flex: 1, minHeight: 46, background: captainTab==="settings" ? "#e52240" : "transparent", border: "none", color: captainTab==="settings" ? "#000" : "#fff", fontSize: 12, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer" }}>SETTINGS</button>
           </>}
         </div>
@@ -1748,24 +1732,6 @@ function App() {
 
         {captainTab === "settings" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.6 }}>Changing a code takes effect immediately — everyone using the old code will need the new one.</div>
-            <div>
-              <label className="label">NEW CAPTAIN CODE</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input className="field" value={newCaptainCode} onChange={e => setNewCaptainCode(e.target.value)} />
-                <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={() => saveAccessCode("captain")}>Save</button>
-              </div>
-            </div>
-            <div>
-              <label className="label">NEW ADMIN CODE</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input className="field" value={newAdminCode} onChange={e => setNewAdminCode(e.target.value)} />
-                <button className="btn-primary" style={{ width: "auto", padding: "0 18px" }} onClick={() => saveAccessCode("admin")}>Save</button>
-              </div>
-            </div>
-            {settingsMsg && <div className={settingsMsg.includes("update") ? "ok" : "err"}>{settingsMsg}</div>}
-
-            <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
             <div>
               <div className="label">RUN STREAKS</div>
               <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 10 }}>Recalculated automatically every Monday from check-in history. Run it manually if you want to see it update right now.</div>
@@ -1839,33 +1805,44 @@ function App() {
                 </>
               )}
             </div>
-          </div>
-        )}
 
-        {captainTab === "users" && (
-          <div>
-            <input className="field" placeholder="Search all users" value={usersSearch} onChange={e => setUsersSearch(e.target.value)} style={{ marginBottom: 16 }} />
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {allRunners
-                .filter(r => !usersSearch.trim() || (r.first_name + " " + r.last_name + " " + r.email).toLowerCase().includes(usersSearch.trim().toLowerCase()))
-                .sort((a, b) => (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name))
-                .map(r => (
-                  <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #191919" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
-                      {r.is_active_member && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e52240" }}>MEMBER</div>}
-                    </div>
-                    <select value={r.app_role || "runner"} onChange={e => setUserRole(r.id, e.target.value)} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
-                      <option value="runner">RUNNER</option>
-                      <option value="pacer">PACER</option>
-                      <option value="flight_crew">FLIGHT CREW</option>
-                      <option value="captain">CAPTAIN</option>
-                      <option value="admin">ADMIN</option>
-                    </select>
+            <div style={{ height: 1, background: "#1e1e1e", margin: "8px 0" }} />
+            <div>
+              <button onClick={() => setUsersExpanded(e => !e)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: usersExpanded ? 12 : 0 }}>
+                <span className="label" style={{ marginBottom: 0 }}>USERS</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#6a6a6a" }}>{allRunners.length} people</span>
+                  <span style={{ color: "#6a6a6a", fontSize: 12 }}>{usersExpanded ? "▴" : "▾"}</span>
+                </span>
+              </button>
+
+              {usersExpanded && (
+                <>
+                  <input className="field" placeholder="Search all users" value={usersSearch} onChange={e => setUsersSearch(e.target.value)} style={{ marginBottom: 16 }} />
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {allRunners
+                      .filter(r => !usersSearch.trim() || (r.first_name + " " + r.last_name + " " + r.email).toLowerCase().includes(usersSearch.trim().toLowerCase()))
+                      .sort((a, b) => (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name))
+                      .map(r => (
+                        <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #191919" }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
+                            {r.is_active_member && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e52240" }}>MEMBER</div>}
+                          </div>
+                          <select value={r.app_role || "runner"} onChange={e => setUserRole(r, e.target.value)} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
+                            <option value="runner">RUNNER</option>
+                            <option value="pacer">PACER</option>
+                            <option value="flight_crew">FLIGHT CREW</option>
+                            <option value="captain">CAPTAIN</option>
+                            <option value="admin">ADMIN</option>
+                          </select>
+                        </div>
+                      ))}
                   </div>
-                ))}
+                  {usersMsg && <div className={usersMsg.includes("Updated") ? "ok" : "err"} style={{ marginTop: 12 }}>{usersMsg}</div>}
+                </>
+              )}
             </div>
-            {usersMsg && <div className={usersMsg.includes("Updated") ? "ok" : "err"} style={{ marginTop: 12 }}>{usersMsg}</div>}
           </div>
         )}
 
