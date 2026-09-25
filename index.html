@@ -1602,7 +1602,7 @@ function App() {
                 <button onClick={() => { setEditingProfile(false); setEditProfileMsg(""); }} style={{ width: "100%", minHeight: 36, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", borderRadius: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase", cursor: "pointer" }}>Cancel</button>
               </div>
             ) : (
-              <button className="btn-ghost" onClick={() => { setEditPhone(me.phone || ""); setEditSmsOptIn(!!me.sms_opt_in); setEditProfileMsg(""); setEditingProfile(true); }} style={{ marginTop: 22 }}>Edit profile</button>
+              <button className="btn-ghost" onClick={() => { setEditPhone(me.phone ? formatPhone(me.phone) : ""); setEditSmsOptIn(!!me.sms_opt_in); setEditProfileMsg(""); setEditingProfile(true); }} style={{ marginTop: 22 }}>Edit profile</button>
             )}
 
             <button className="btn-ghost" onClick={signOut} style={{ marginTop: 12, background: "none", border: "none", color: "#6a6a6a", fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "12px 0", textAlign: "left", width: "auto" }}>Sign out</button>
@@ -1968,7 +1968,7 @@ function App() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <input className="field" placeholder="e.g. Saturday Long Run" value={eventForm.name} onChange={e => setEventField({ name: e.target.value })} />
-                <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ display: "flex", gap: 20 }}>
                   <div style={{ flex: 1 }}>
                     <label className="label">DATE</label>
                     <input className="field" type="date" value={eventForm.event_date} onChange={e => setEventField({ event_date: e.target.value })} style={{ colorScheme: "dark" }} />
