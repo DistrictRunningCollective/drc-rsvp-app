@@ -2059,13 +2059,25 @@ function App() {
                           </div>
 
                           {expandedUserId === r.id && (
-                            <div style={{ marginTop: 10, background: "#121212", padding: 14, borderRadius: 2, display: "flex", flexDirection: "column", gap: 6 }}>
-                              <div style={{ fontSize: 12, color: "#b4b4b4" }}><span style={{ color: "#6a6a6a" }}>Email </span>{r.email}</div>
-                              <div style={{ fontSize: 12, color: "#b4b4b4" }}><span style={{ color: "#6a6a6a" }}>Phone </span>{r.phone || "—"}</div>
-                              <div style={{ fontSize: 12, color: "#b4b4b4" }}><span style={{ color: "#6a6a6a" }}>Code </span>{r.code || "—"}</div>
-                              <div style={{ fontSize: 12, color: "#b4b4b4" }}><span style={{ color: "#6a6a6a" }}>Member since </span>{r.member_since ? new Date(r.member_since + "T00:00:00").getFullYear() : "—"}</div>
+                            <div style={{ marginTop: 10, border: "1px solid #232323", padding: "4px 14px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #191919" }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#7a7a7a" }}>Email</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", textAlign: "right" }}>{r.email}</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #191919" }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#7a7a7a" }}>Phone</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{r.phone || "—"}</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #191919" }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#7a7a7a" }}>Code</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{r.code || "—"}</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0" }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#7a7a7a" }}>Member since</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{r.member_since ? new Date(r.member_since + "T00:00:00").getFullYear() : "—"}</span>
+                              </div>
                               {(r.app_role || "runner") === "runner" && (
-                                <button onClick={() => setPendingDeleteUser(r)} style={{ marginTop: 6, alignSelf: "flex-start", minHeight: 34, padding: "0 14px", cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".1em", background: "transparent", color: "#e52240", border: "1px solid #e52240" }}>DELETE USER</button>
+                                <button onClick={() => setPendingDeleteUser(r)} style={{ width: "100%", marginTop: 4, marginBottom: 12, minHeight: 36, cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".1em", background: "transparent", color: "#e52240", border: "1px solid #e52240" }}>DELETE USER</button>
                               )}
                             </div>
                           )}
