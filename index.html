@@ -236,6 +236,7 @@ function App() {
   const [usersSearch, setUsersSearch] = useState("");
   const [usersMsg, setUsersMsg] = useState("");
   const [usersExpanded, setUsersExpanded] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] = useState(null);
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
@@ -947,9 +948,8 @@ function App() {
 
   async function setUserRole(runner, role) {
     setUsersMsg("");
-    const roleLabel = { runner: "Runner", pacer: "Pacer", flight_crew: "Flight Crew", captain: "Captain", admin: "Admin" }[role] || role;
-    if (!window.confirm(`Change ${runner.first_name} ${runner.last_name}'s role to ${roleLabel}?`)) return;
     const { error } = await sb.rpc("admin_set_app_role", { p_runner_id: runner.id, p_role: role });
+    setPendingRoleChange(null);
     if (error) return setUsersMsg("Couldn't update — try again.");
     setAllRunners(rs => rs.map(r => r.id === runner.id ? { ...r, app_role: role } : r));
     setUsersMsg("Updated.");
@@ -1824,18 +1824,30 @@ function App() {
                       .filter(r => !usersSearch.trim() || (r.first_name + " " + r.last_name + " " + r.email).toLowerCase().includes(usersSearch.trim().toLowerCase()))
                       .sort((a, b) => (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name))
                       .map(r => (
-                        <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #191919" }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
-                            {r.is_active_member && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e52240" }}>MEMBER</div>}
+                        <div key={r.id} style={{ padding: "12px 0", borderBottom: "1px solid #191919" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
+                              {r.is_active_member && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e52240" }}>MEMBER</div>}
+                            </div>
+                            <select value={pendingRoleChange?.runner.id === r.id ? pendingRoleChange.newRole : (r.app_role || "runner")} onChange={e => setPendingRoleChange({ runner: r, newRole: e.target.value })} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
+                              <option value="runner">RUNNER</option>
+                              <option value="pacer">PACER</option>
+                              <option value="flight_crew">FLIGHT CREW</option>
+                              <option value="captain">CAPTAIN</option>
+                              <option value="admin">ADMIN</option>
+                            </select>
                           </div>
-                          <select value={r.app_role || "runner"} onChange={e => setUserRole(r, e.target.value)} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
-                            <option value="runner">RUNNER</option>
-                            <option value="pacer">PACER</option>
-                            <option value="flight_crew">FLIGHT CREW</option>
-                            <option value="captain">CAPTAIN</option>
-                            <option value="admin">ADMIN</option>
-                          </select>
+                          {pendingRoleChange?.runner.id === r.id && (
+                            <div style={{ marginTop: 10, border: "1px solid #e52240", background: "#1a0a0e", padding: 14, borderRadius: 2 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 6 }}>Change {r.first_name} {r.last_name}'s role to {{ runner: "Runner", pacer: "Pacer", flight_crew: "Flight Crew", captain: "Captain", admin: "Admin" }[pendingRoleChange.newRole]}?</div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#cc9999", lineHeight: 1.5, marginBottom: 14 }}>This changes what they can access right away.</div>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button onClick={() => setUserRole(pendingRoleChange.runner, pendingRoleChange.newRole)} style={{ flex: 1, minHeight: 40, background: "#e52240", color: "#000", border: "none", fontSize: 11, fontWeight: 900, letterSpacing: ".08em", borderRadius: 2, cursor: "pointer" }}>YES, CHANGE</button>
+                                <button onClick={() => setPendingRoleChange(null)} style={{ flex: 1, minHeight: 40, background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a", fontSize: 11, fontWeight: 800, letterSpacing: ".08em", borderRadius: 2, cursor: "pointer" }}>CANCEL</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                   </div>
