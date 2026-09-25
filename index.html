@@ -295,7 +295,17 @@ function App() {
   useEffect(() => {
     refreshAll();
     sb.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    const { data: sub } = sb.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+      // The magic-link redirect leaves the one-time token sitting in the
+      // URL hash. If we never clear it, a later refresh of the same tab
+      // re-submits that same now-stale token instead of just restoring
+      // the already-valid session from local storage — which is exactly
+      // what was signing people back out on refresh.
+      if (sess && window.location.hash.includes("access_token")) {
+        window.history.replaceState({}, "", window.location.pathname + window.location.search);
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
