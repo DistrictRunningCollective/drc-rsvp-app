@@ -1160,8 +1160,8 @@ function App() {
     if (landingStep === "welcome") {
       return (
         <div className="app-shell" style={{ padding: "6px 24px 40px", justifyContent: "center" }}>
-          <div style={{ textAlign: "center", margin: "32px 0 24px" }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 28 }}>DISTRICT RUNNING COLLECTIVE</div>
+          <div style={{ textAlign: "center", margin: "32px 0 0" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 32 }}>DISTRICT RUNNING COLLECTIVE</div>
             <img src={DRC_LOGO} alt="DRC" style={{ width: 68, height: "auto", display: "block", margin: "0 auto 32px" }} />
           </div>
           <h2 style={{ margin: "0 0 8px", fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96, textAlign: "center" }}>Get started</h2>
@@ -1347,7 +1347,7 @@ function App() {
                 )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
               <img src={DRC_LOGO} alt="DRC" style={{ width: 30, height: "auto", display: "block" }} />
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : (role === "captain" ? "CAPTAIN" : role === "flight_crew" ? "FLIGHT CREW" : role === "pacer" ? "PACER" : (me.is_active_member ? "MEMBER PASS" : "PASS"))}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : (role === "admin" ? "ADMIN PASS" : role === "captain" ? "CAPTAIN" : role === "flight_crew" ? "FLIGHT CREW" : role === "pacer" ? "PACER" : (me.is_active_member ? "MEMBER PASS" : "PASS"))}</div>
             </div>
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
