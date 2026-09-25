@@ -1969,13 +1969,13 @@ function App() {
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <input className="field" placeholder="e.g. Saturday Long Run" value={eventForm.name} onChange={e => setEventField({ name: e.target.value })} />
                 <div style={{ display: "flex", gap: 20 }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <label className="label">DATE</label>
-                    <input className="field" type="date" value={eventForm.event_date} onChange={e => setEventField({ event_date: e.target.value })} style={{ colorScheme: "dark" }} />
+                    <input className="field" type="date" value={eventForm.event_date} onChange={e => setEventField({ event_date: e.target.value })} style={{ colorScheme: "dark", width: "100%", boxSizing: "border-box" }} />
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <label className="label">TIME</label>
-                    <input className="field" type="time" value={eventForm.event_time} onChange={e => setEventField({ event_time: e.target.value })} style={{ colorScheme: "dark" }} />
+                    <input className="field" type="time" value={eventForm.event_time} onChange={e => setEventField({ event_time: e.target.value })} style={{ colorScheme: "dark", width: "100%", boxSizing: "border-box" }} />
                   </div>
                 </div>
                 <div>
