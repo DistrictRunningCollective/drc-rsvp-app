@@ -193,10 +193,11 @@ function App() {
   const [tab, setTab] = useState(() => localStorage.getItem("drc_last_tab") || "pass");
 
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [authSent, setAuthSent] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [needsProfile, setNeedsProfile] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", smsOptIn: false, pace: "", waiver: false });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", smsOptIn: false, pace: "", waiver: false, password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -213,6 +214,9 @@ function App() {
   const [waiverBannerDismissed, setWaiverBannerDismissed] = useState(false);
   const [resigning, setResigning] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [editPassword, setEditPassword] = useState("");
+  const [editPasswordMsg, setEditPasswordMsg] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
   const [editPhone, setEditPhone] = useState("");
   const [editSmsOptIn, setEditSmsOptIn] = useState(false);
   const [editProfileMsg, setEditProfileMsg] = useState("");
@@ -385,6 +389,7 @@ function App() {
             joined_label: new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" }).toUpperCase(),
           }).select().single();
           if (!error) {
+            if (pending.password) await sb.auth.updateUser({ password: pending.password });
             setAllRunners(r => r.concat([data]));
             routeAfterSignIn(data);
             return;
@@ -582,6 +587,17 @@ function App() {
     await sb.from("runners").update({ [field]: value }).eq("id", me.id);
   }
 
+  async function savePassword() {
+    setEditPasswordMsg("");
+    if (editPassword.length < 6) return setEditPasswordMsg("Password's too short — use at least 6 characters.");
+    setSavingPassword(true);
+    const { error } = await sb.auth.updateUser({ password: editPassword });
+    setSavingPassword(false);
+    if (error) return setEditPasswordMsg("Something went wrong — try again.");
+    setEditPassword("");
+    setEditPasswordMsg("Password updated.");
+  }
+
   async function saveProfilePhone() {
     setEditProfileMsg("");
     if (!isPhone(editPhone)) return setEditProfileMsg("Add a phone number (10 digits).");
@@ -771,6 +787,16 @@ function App() {
     setAuthSent(true);
   }
 
+  async function signInWithPassword() {
+    setAuthErr("");
+    if (!isEmail(authEmail)) return setAuthErr("That email doesn't look right.");
+    if (!authPassword) return setAuthErr("Enter your password.");
+    setLoading(true);
+    const { error } = await sb.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
+    setLoading(false);
+    if (error) return setAuthErr("Wrong email or password.");
+  }
+
   async function submitSignup() {
     setError("");
     if (!form.firstName.trim()) return setError("Add your first name.");
@@ -780,7 +806,7 @@ function App() {
     if (!form.pace) return setError("Pick a pace group.");
     if (!form.waiver) return setError("You'll need to agree to the waiver to run with us.");
     const email = form.email.trim().toLowerCase();
-    localStorage.setItem("drc_pending_signup", JSON.stringify({ email, firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(), smsOptIn: form.smsOptIn, pace: form.pace }));
+    localStorage.setItem("drc_pending_signup", JSON.stringify({ email, firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(), smsOptIn: form.smsOptIn, pace: form.pace, password: form.password }));
     const error = await requestMagicLink(email);
     if (error) return setError(error.status === 429 ? "Too many attempts — wait a few minutes and try again." : "Couldn't send the link. Try again in a minute.");
     setAuthSent(true);
@@ -811,6 +837,7 @@ function App() {
     }).select().single();
     setLoading(false);
     if (error) return setError("Something went wrong creating your pass. Try again.");
+    if (form.password) await sb.auth.updateUser({ password: form.password });
     setMe(data);
     setAllRunners(r => r.concat([data]));
     setView("member"); setTab("pass"); setNeedsProfile(false);
@@ -1178,6 +1205,10 @@ function App() {
                   <div style={{ fontSize: 11, fontWeight: 500, color: "#6a6a6a", marginTop: 8, lineHeight: 1.5 }}>We send a sign-in link. No password to remember.</div>
                 </div>
                 <div>
+                  <label className="label">PASSWORD <span style={{ color: "#5a5a5a" }}>(optional)</span></label>
+                  <input className="field" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Skip this if you'd rather just use email links" />
+                </div>
+                <div>
                   <label className="label">PHONE NUMBER</label>
                   <input className="field" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(202) 555-0100" />
                 </div>
@@ -1219,8 +1250,13 @@ function App() {
         {!authSent ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <input className="field" type="email" placeholder="you@email.com" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
+            <input className="field" type="password" placeholder="Password (optional)" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
             {authErr && <div className="err">{authErr}</div>}
-            <button className="btn-primary" disabled={loading} onClick={sendMagicLink}>{loading ? "Sending…" : "Email me a sign-in link"}</button>
+            {authPassword ? (
+              <button className="btn-primary" disabled={loading} onClick={signInWithPassword}>{loading ? "Signing in…" : "Sign in with password"}</button>
+            ) : (
+              <button className="btn-primary" disabled={loading} onClick={sendMagicLink}>{loading ? "Sending…" : "Email me a sign-in link"}</button>
+            )}
           </div>
         ) : (
           <div className="ok">Check your email for a sign-in link — it'll bring you right back here.</div>
@@ -1249,6 +1285,10 @@ function App() {
           <div>
             <label className="label">PHONE NUMBER</label>
             <input className="field" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(202) 555-0100" />
+          </div>
+          <div>
+            <label className="label">PASSWORD <span style={{ color: "#5a5a5a" }}>(optional)</span></label>
+            <input className="field" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Skip this if you'd rather just use email links" />
           </div>
           <button onClick={() => setForm(f => ({ ...f, smsOptIn: !f.smsOptIn }))} style={{ display: "flex", gap: 12, alignItems: "center", minHeight: 48, padding: "10px 14px", cursor: "pointer", borderRadius: 4, background: "#121212", border: "1px solid " + (form.smsOptIn ? "#e52240" : "#2a2a2a"), color: "#d4d4d4", textAlign: "left" }}>
             <span style={{ flex: "0 0 20px", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, background: form.smsOptIn ? "#e52240" : "transparent", border: "2px solid " + (form.smsOptIn ? "#e52240" : "#3a3a3a"), color: "#000" }}>{form.smsOptIn ? "✓" : ""}</span>
@@ -1532,6 +1572,11 @@ function App() {
                   <span style={{ flex: "0 0 20px", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, background: editSmsOptIn ? "#e52240" : "transparent", border: "2px solid " + (editSmsOptIn ? "#e52240" : "#3a3a3a"), color: "#000" }}>{editSmsOptIn ? "✓" : ""}</span>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>Text me reminders and updates</span>
                 </button>
+                <div style={{ height: 1, background: "#1e1e1e", margin: "0 0 14px" }} />
+                <label className="label">PASSWORD <span style={{ color: "#5a5a5a" }}>(optional)</span></label>
+                <input className="field" type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Set or change your password" style={{ marginBottom: 8 }} />
+                <button disabled={savingPassword || !editPassword} onClick={savePassword} className="btn-ghost" style={{ marginBottom: 12 }}>{savingPassword ? "Saving…" : "Update password"}</button>
+                {editPasswordMsg && <div className={editPasswordMsg.includes("short") || editPasswordMsg.includes("wrong") ? "err" : "ok"} style={{ marginBottom: 12 }}>{editPasswordMsg}</div>}
                 <div style={{ height: 1, background: "#1e1e1e", margin: "0 0 14px" }} />
                 {editProfileMsg && <div className={editProfileMsg.includes("wrong") || editProfileMsg.includes("Add a") ? "err" : "ok"} style={{ marginBottom: 12 }}>{editProfileMsg}</div>}
                 <button className="btn-primary" disabled={editProfileSaving} onClick={saveProfilePhone} style={{ marginBottom: 8 }}>{editProfileSaving ? "Saving…" : "Save"}</button>
