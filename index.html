@@ -774,15 +774,19 @@ function App() {
   // when actually inside that portal; the rest highlight only while on
   // the member view, and switch back to it when tapped from elsewhere.
   function renderBottomNav() {
+    const hasPortalAccess = role === "captain" || role === "flight_crew" || role === "admin";
     const baseTabs = me.is_active_member
-      ? (role && role !== "runner" ? ["pass","runs","profile","members"] : ["pass","profile","runs","members"])
+      ? (hasPortalAccess ? ["pass","runs","profile","members"] : ["pass","profile","runs","members"])
       : ["pass","profile","runs"];
     return (
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 440, margin: "0 auto", display: "flex", borderTop: "1px solid #1e1e1e", background: "#000" }}>
-        {baseTabs.map(t => (
-          <button key={t} onClick={() => { switchTab(t); setEditingField(null); setView("member"); }} style={{ flex: 1, minHeight: 56, background: (view === "member" && tab === t) ? "#e52240" : "transparent", border: "none", color: (view === "member" && tab === t) ? "#000" : "#5a5a5a", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
-        ))}
-        {role && role !== "runner" && (
+        {baseTabs.map(t => {
+          const active = view === "member" && tab === t;
+          return (
+            <button key={t} onClick={() => { switchTab(t); setEditingField(null); setView("member"); }} style={{ flex: 1, minHeight: 56, background: active ? "#e52240" : "transparent", border: "none", color: active ? "#000" : (t === "profile" ? "#fff" : "#5a5a5a"), fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{t.toUpperCase()}</button>
+          );
+        })}
+        {hasPortalAccess && (
           <button onClick={() => setView("captain")} style={{ flex: 1, minHeight: 56, background: view === "captain" ? "#e52240" : "transparent", border: "none", color: view === "captain" ? "#000" : "#e52240", fontSize: 11, fontWeight: 900, letterSpacing: ".16em", cursor: "pointer" }}>{role === "admin" ? "ADMIN" : "CHECK-IN"}</button>
         )}
       </div>
@@ -1198,7 +1202,7 @@ function App() {
                 )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
               <img src={DRC_LOGO} alt="DRC" style={{ width: 30, height: "auto", display: "block" }} />
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : (me.is_active_member ? "MEMBER PASS" : "PASS")}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>{myCheckedIn ? "ON TODAY'S ROSTER" : (role === "captain" ? "CAPTAIN" : role === "flight_crew" ? "FLIGHT CREW" : role === "pacer" ? "PACER" : (me.is_active_member ? "MEMBER PASS" : "PASS"))}</div>
             </div>
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
@@ -1853,6 +1857,7 @@ function App() {
                     </div>
                     <select value={r.app_role || "runner"} onChange={e => setUserRole(r.id, e.target.value)} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
                       <option value="runner">RUNNER</option>
+                      <option value="pacer">PACER</option>
                       <option value="flight_crew">FLIGHT CREW</option>
                       <option value="captain">CAPTAIN</option>
                       <option value="admin">ADMIN</option>
