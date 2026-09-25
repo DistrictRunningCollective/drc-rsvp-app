@@ -1133,15 +1133,15 @@ function App() {
     if (landingStep === "welcome") {
       return (
         <div className="app-shell" style={{ padding: "6px 24px 40px", justifyContent: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "32px 0 32px" }}>
-            <img src={DRC_LOGO} alt="DRC" style={{ width: 34, height: "auto", display: "block" }} />
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240" }}>DISTRICT RUNNING COLLECTIVE</div>
+          <div style={{ textAlign: "center", margin: "32px 0 24px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#e52240", marginBottom: 28 }}>DISTRICT RUNNING COLLECTIVE</div>
+            <img src={DRC_LOGO} alt="DRC" style={{ width: 68, height: "auto", display: "block", margin: "0 auto 32px" }} />
           </div>
-          <h2 style={{ margin: "0 0 8px", fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96 }}>Get started</h2>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 30 }}>Same sign-in, every time.</div>
+          <h2 style={{ margin: "0 0 8px", fontSize: 32, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.96, textAlign: "center" }}>Get started</h2>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#8a8a8a", lineHeight: 1.6, marginBottom: 30, textAlign: "center" }}>Same sign-in, every time.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <button className="btn-primary" onClick={() => setLandingStep("signup")}>Create my pass</button>
-            <button className="btn-ghost" onClick={() => setLandingStep("email")}>Access my pass by email</button>
+            <button className="btn-ghost" onClick={() => setLandingStep("email")}>Login</button>
           </div>
         </div>
       );
