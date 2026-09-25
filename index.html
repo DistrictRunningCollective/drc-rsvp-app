@@ -70,6 +70,17 @@ function loadImage(src) {
   });
 }
 
+// Shortens the raw RunSignUp event names for display — the stored
+// event_name stays exactly as RunSignUp sent it, this only affects
+// what's shown on the badge.
+function raceDistanceLabel(name) {
+  if (!name) return name;
+  if (/19\s*mile/i.test(name)) return "19M";
+  if (/19\s*k/i.test(name)) return "19K";
+  if (/5\s*k/i.test(name)) return "5K";
+  return name;
+}
+
 function formatDateLabel(d) {
   if (!d) return "";
   const dt = new Date(d + "T00:00:00");
@@ -619,6 +630,15 @@ function App() {
     return upcoming[0] || null;
   }, [events]);
 
+  // The soonest upcoming registered race, if any — compared against
+  // nextEvent below to decide which one is genuinely "next up" on the
+  // Pass tab, rather than always showing both.
+  const nextRaceReg = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return myRaceRegs
+      .filter(r => r.event_date && r.event_date >= today)
+      .sort((a, b) => a.event_date.localeCompare(b.event_date))[0] || null;
+  }, [myRaceRegs]);
   // An event the runner RSVP'd to that's happening right now — only
   // detectable for events with a real end time set, since without one
   // there's no reliable way to know when it's actually over. Separate
@@ -760,12 +780,13 @@ function App() {
   }
 
   // The one place that decides what someone sees right after signing
-  // in. Everyone always lands on their own Pass now — a role just adds
-  // an extra tab to the bottom nav rather than routing anywhere special.
+  // in. Doesn't force the tab back to Pass — tab already initializes
+  // from localStorage, so a refresh keeps whatever tab someone was on
+  // instead of bouncing them back to Pass every time.
   function routeAfterSignIn(runner) {
     setMe(runner);
     setRole(runner.app_role || "runner");
-    setView("member"); setTab("pass");
+    setView("member");
     sb.from("race_registrations").select("*").then(({ data }) => setMyRaceRegs(data || []));
   }
 
@@ -1183,6 +1204,7 @@ function App() {
   if (view === "member" && me) {
     const myRsvp = nextEvent && rsvpMap[nextEvent.id]?.has(me.id);
     const myCheckedIn = nextEvent && checkinMap[nextEvent.id]?.has(me.id);
+    const raceIsNext = nextRaceReg && (!nextEvent || nextRaceReg.event_date <= nextEvent.event_date);
 
     // Expired waiver blocks the whole app — no tabs, no nav, nothing
     // reachable until they resign.
@@ -1294,7 +1316,27 @@ function App() {
                 )}
               </div>
             )}
-            {nextEvent && (
+            {raceIsNext && (
+              <div style={{ marginTop: 20, background: "#000", border: "1px solid #232323", padding: "18px 20px", position: "relative", overflow: "hidden" }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 10 }}>NEXT UP — YOU'RE REGISTERED</div>
+                <div style={{ fontSize: 30, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.95, marginBottom: 12, color: "#fff", textShadow: "2px 0 0 #e52240, -2px 0 0 #22d3d3" }}>District<br/>19</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  {nextRaceReg.event_name && (
+                    <span style={{ background: "#e52240", color: "#000", fontSize: 11, fontWeight: 900, padding: "3px 10px", letterSpacing: ".05em" }}>{raceDistanceLabel(nextRaceReg.event_name)}</span>
+                  )}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#b4b4b4", alignSelf: "center" }}>{new Date(nextRaceReg.event_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{nextRaceReg.bib_num ? " · Bib " + nextRaceReg.bib_num : ""}</span>
+                </div>
+                <div style={{ display: "flex", height: 6, borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ flex: 1, background: "#d4c93a" }} />
+                  <div style={{ flex: 1, background: "#22b8b8" }} />
+                  <div style={{ flex: 1, background: "#3ab54a" }} />
+                  <div style={{ flex: 1, background: "#9b3ab5" }} />
+                  <div style={{ flex: 1, background: "#e52240" }} />
+                  <div style={{ flex: 1, background: "#3a4ab5" }} />
+                </div>
+              </div>
+            )}
+            {nextEvent && !raceIsNext && (
               myCheckedIn ? (
                 <div style={{ marginTop: 20, background: "#e52240", color: "#000", padding: "18px 20px" }}>
                   <div style={{ fontSize: 24, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 1 }}>Checked in</div>
@@ -1437,7 +1479,7 @@ function App() {
                 <div style={{ fontSize: 30, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", lineHeight: 0.95, marginBottom: 12, color: "#fff", textShadow: "2px 0 0 #e52240, -2px 0 0 #22d3d3" }}>District<br/>19</div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                   {reg.event_name && (
-                    <span style={{ background: "#e52240", color: "#000", fontSize: 11, fontWeight: 900, padding: "3px 10px", letterSpacing: ".05em" }}>{reg.event_name}</span>
+                    <span style={{ background: "#e52240", color: "#000", fontSize: 11, fontWeight: 900, padding: "3px 10px", letterSpacing: ".05em" }}>{raceDistanceLabel(reg.event_name)}</span>
                   )}
                   <span style={{ fontSize: 12, fontWeight: 700, color: "#b4b4b4", alignSelf: "center" }}>{reg.event_date ? new Date(reg.event_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : ""}{reg.bib_num ? " · Bib " + reg.bib_num : ""}</span>
                 </div>
@@ -1734,7 +1776,7 @@ function App() {
                 {editingEventId && <button onClick={newEventForm} style={{ background: "none", border: "none", color: "#e52240", fontSize: 10, fontWeight: 800, letterSpacing: ".1em", cursor: "pointer" }}>+ NEW INSTEAD</button>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <input className="field" placeholder="Run name" value={eventForm.name} onChange={e => setEventField({ name: e.target.value })} />
+                <input className="field" placeholder="e.g. Saturday Long Run" value={eventForm.name} onChange={e => setEventField({ name: e.target.value })} />
                 <div style={{ display: "flex", gap: 10 }}>
                   <input className="field" type="date" value={eventForm.event_date} onChange={e => setEventField({ event_date: e.target.value })} style={{ colorScheme: "dark" }} />
                   <input className="field" type="time" value={eventForm.event_time} onChange={e => setEventField({ event_time: e.target.value })} style={{ colorScheme: "dark" }} />
@@ -1754,14 +1796,14 @@ function App() {
                     <div style={{ border: "1px dashed #2a2a2a", borderRadius: 4, padding: 14, marginTop: 10 }}>
                       <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".16em", color: "#6a6a6a", marginBottom: 10 }}>NEW LOCATION</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <input className="field" style={{ fontSize: 13, padding: 11 }} placeholder="Location name" value={newLocationName} onChange={e => setNewLocationName(e.target.value)} />
-                        <input className="field" style={{ fontSize: 13, padding: 11 }} placeholder="Street address" value={newLocationAddress} onChange={e => setNewLocationAddress(e.target.value)} />
+                        <input className="field" style={{ fontSize: 13, padding: 11 }} placeholder="e.g. RFK Track" value={newLocationName} onChange={e => setNewLocationName(e.target.value)} />
+                        <input className="field" style={{ fontSize: 13, padding: 11 }} placeholder="e.g. 2400 East Capitol St SE, Washington, DC" value={newLocationAddress} onChange={e => setNewLocationAddress(e.target.value)} />
                         <button onClick={addLocation} style={{ minHeight: 38, background: "#e52240", color: "#000", border: "none", fontSize: 12, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", borderRadius: 4, cursor: "pointer" }}>Save location</button>
                       </div>
                     </div>
                   )}
                 </div>
-                <input className="field" placeholder="Notes, optional" value={eventForm.notes} onChange={e => setEventField({ notes: e.target.value })} />
+                <input className="field" placeholder="e.g. Meet at the flagpole, bring water" value={eventForm.notes} onChange={e => setEventField({ notes: e.target.value })} />
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => setEventField({ mileage: false, special: false })} style={{ flex: 1, minHeight: 44, cursor: "pointer", borderRadius: 2, fontSize: 11, fontWeight: 800, letterSpacing: ".08em", background: (!eventForm.mileage && !eventForm.special) ? "#e52240" : "#121212", border: "1px solid " + ((!eventForm.mileage && !eventForm.special) ? "#e52240" : "#2a2a2a"), color: (!eventForm.mileage && !eventForm.special) ? "#000" : "#8a8a8a" }}>WEDNESDAY RUN</button>
                   <button onClick={() => setEventField({ mileage: true, special: false })} style={{ flex: 1, minHeight: 44, cursor: "pointer", borderRadius: 2, fontSize: 11, fontWeight: 800, letterSpacing: ".08em", background: (eventForm.mileage && !eventForm.special) ? "#e52240" : "#121212", border: "1px solid " + ((eventForm.mileage && !eventForm.special) ? "#e52240" : "#2a2a2a"), color: (eventForm.mileage && !eventForm.special) ? "#000" : "#8a8a8a" }}>SATURDAY RUN</button>
