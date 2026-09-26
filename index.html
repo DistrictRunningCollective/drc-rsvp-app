@@ -2156,8 +2156,9 @@ function App() {
                         <div key={r.id} style={{ padding: "12px 0", borderBottom: "1px solid #191919" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <button onClick={() => setExpandedUserId(id => id === r.id ? null : r.id)} style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.first_name} {r.last_name}</div>
+                              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{r.is_guest ? r.email : (r.first_name + " " + r.last_name)}</div>
                               {r.is_active_member && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e52240" }}>MEMBER</div>}
+                              {r.is_guest && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", color: "#e5a72e" }}>GUEST</div>}
                             </button>
                             <select value={pendingRoleChange?.runner.id === r.id ? pendingRoleChange.newRole : (r.app_role || "runner")} onChange={e => setPendingRoleChange({ runner: r, newRole: e.target.value })} style={{ background: "#121212", border: "1px solid " + (r.app_role === "admin" ? "#e52240" : "#2a2a2a"), color: r.app_role === "admin" ? "#e52240" : "#d4d4d4", fontSize: 11, fontWeight: 800, padding: "8px 10px", borderRadius: 4 }}>
                               <option value="runner">RUNNER</option>
