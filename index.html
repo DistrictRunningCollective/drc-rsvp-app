@@ -283,6 +283,7 @@ function App() {
   const [newLocationAddress, setNewLocationAddress] = useState("");
   const [kioskResult, setKioskResult] = useState(null);
   const [expandedBuckets, setExpandedBuckets] = useState({});
+  const [newEventExpanded, setNewEventExpanded] = useState(false);
 
   async function refreshAll() {
     const [{ data: ev }, { data: rs }, { data: ci }, { data: runners }, { data: locs }] = await Promise.all([
@@ -1019,6 +1020,7 @@ function App() {
     setEditingEventId(x.id);
     setEventForm({ name: x.name, event_date: x.event_date || "", event_time: x.event_time ? x.event_time.slice(0, 5) : "", event_end_time: x.event_end_time ? x.event_end_time.slice(0, 5) : "", location_id: x.location_id || "", notes: x.notes || "", mileage: x.mileage, special: x.special, remind: x.remind });
     setAddingLocation(false);
+    setNewEventExpanded(true);
   }
   async function saveEventForm() {
     setEventSaveMsg("");
@@ -1987,10 +1989,13 @@ function App() {
             <div style={{ height: 1, background: "#1e1e1e" }} />
 
             <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a" }}>{editingEventId ? "EDITING · " + eventForm.name : "NEW EVENT"}</div>
-                {editingEventId && <button onClick={newEventForm} style={{ background: "none", border: "none", color: "#e52240", fontSize: 10, fontWeight: 800, letterSpacing: ".1em", cursor: "pointer" }}>+ NEW INSTEAD</button>}
-              </div>
+              <button onClick={() => setNewEventExpanded(e => !e)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: newEventExpanded ? 14 : 0 }}>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#fff" }}>{editingEventId ? "EDITING · " + eventForm.name : "NEW EVENT"}</span>
+                <span style={{ color: "#6a6a6a", fontSize: 12 }}>{newEventExpanded ? "▴" : "▾"}</span>
+              </button>
+              {newEventExpanded && (
+                <>
+              {editingEventId && <button onClick={newEventForm} style={{ background: "none", border: "none", color: "#e52240", fontSize: 10, fontWeight: 800, letterSpacing: ".1em", cursor: "pointer", marginBottom: 14 }}>+ NEW INSTEAD</button>}
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <input className="field" placeholder="e.g. Saturday Long Run" value={eventForm.name} onChange={e => setEventField({ name: e.target.value })} />
                 <div>
@@ -2036,6 +2041,8 @@ function App() {
                 <button className="btn-primary" onClick={saveEventForm} style={{ marginTop: 4 }}>{editingEventId ? "Save changes" : "Add event"}</button>
                 {eventSaveMsg && <div className={eventSaveMsg === "Saved." ? "ok" : "err"}>{eventSaveMsg}</div>}
               </div>
+                </>
+              )}
             </div>
           </div>
         )}
