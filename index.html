@@ -273,7 +273,7 @@ function App() {
   const [membershipSyncing, setMembershipSyncing] = useState(false);
   const [membershipSyncMsg, setMembershipSyncMsg] = useState("");
   const [recalculating, setRecalculating] = useState(false);
-  const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
+  const [eventForm, setEventForm] = useState({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true, capacity: "" });
   const [editingEventId, setEditingEventId] = useState(null);
   const [eventSaveMsg, setEventSaveMsg] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -976,7 +976,8 @@ function App() {
 
   async function captainRsvpFor(runnerId, eventId) {
     setRsvpMap(m => { const s = new Set(m[eventId] || []); s.add(runnerId); return { ...m, [eventId]: s }; });
-    await sb.rpc("captain_rsvp_for", { p_runner_id: runnerId, p_event_id: eventId });
+    const { error } = await sb.rpc("captain_rsvp_for", { p_runner_id: runnerId, p_event_id: eventId });
+    if (error) setRsvpMap(m => { const s = new Set(m[eventId] || []); s.delete(runnerId); return { ...m, [eventId]: s }; });
   }
 
   async function markCheckinComplete(eventId) {
@@ -1010,8 +1011,11 @@ function App() {
     if (!me) return;
     const has = rsvpMap[eventId]?.has(me.id);
     setRsvpMap(m => { const s = new Set(m[eventId] || []); has ? s.delete(me.id) : s.add(me.id); return { ...m, [eventId]: s }; });
-    if (has) await sb.from("rsvps").delete().eq("runner_id", me.id).eq("event_id", eventId);
-    else await sb.from("rsvps").insert({ runner_id: me.id, event_id: eventId });
+    const { error } = await sb.rpc("toggle_rsvp", { p_event_id: eventId });
+    if (error && !has) {
+      // Sold out (or some other rejection) — revert the optimistic add.
+      setRsvpMap(m => { const s = new Set(m[eventId] || []); s.delete(me.id); return { ...m, [eventId]: s }; });
+    }
   }
 
   function handleScan(text) {
@@ -1032,12 +1036,12 @@ function App() {
   }
   function newEventForm() {
     setEditingEventId(null);
-    setEventForm({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true });
+    setEventForm({ name: "", event_date: "", event_time: "", event_end_time: "", location_id: "", notes: "", mileage: false, special: false, remind: true, capacity: "" });
     setAddingLocation(false);
   }
   function loadEventForm(x) {
     setEditingEventId(x.id);
-    setEventForm({ name: x.name, event_date: x.event_date || "", event_time: x.event_time ? x.event_time.slice(0, 5) : "", event_end_time: x.event_end_time ? x.event_end_time.slice(0, 5) : "", location_id: x.location_id || "", notes: x.notes || "", mileage: x.mileage, special: x.special, remind: x.remind });
+    setEventForm({ name: x.name, event_date: x.event_date || "", event_time: x.event_time ? x.event_time.slice(0, 5) : "", event_end_time: x.event_end_time ? x.event_end_time.slice(0, 5) : "", location_id: x.location_id || "", notes: x.notes || "", mileage: x.mileage, special: x.special, remind: x.remind, capacity: x.capacity != null ? String(x.capacity) : "" });
     setAddingLocation(false);
     setNewEventExpanded(true);
   }
@@ -1050,6 +1054,7 @@ function App() {
       p_event_end_time: eventForm.event_end_time || null,
       p_location_id: eventForm.location_id || null, p_notes: eventForm.notes,
       p_mileage: eventForm.mileage, p_special: eventForm.special, p_remind: eventForm.remind,
+      p_capacity: eventForm.capacity ? parseInt(eventForm.capacity, 10) : null,
     });
     if (error) return setEventSaveMsg("Couldn't save — check you're using the current admin code.");
     await refreshAll();
@@ -1526,7 +1531,10 @@ function App() {
                   <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, letterSpacing: ".06em" }}>{nextEvent.name.toUpperCase()} · {eventDateLabel(nextEvent)} · {eventTimeLabel(nextEvent)}</div>
                 </div>
               ) : (
-                <div style={{ marginTop: 20, border: "1px solid #232323", padding: "18px 20px" }}>
+                <div style={{ marginTop: 20, border: "1px solid #232323", padding: "18px 20px", position: "relative", overflow: "hidden" }}>
+                  {!myRsvp && nextEvent.capacity != null && (rsvpMap[nextEvent.id]?.size || 0) >= nextEvent.capacity && (
+                    <div style={{ position: "absolute", top: 10, right: -30, background: "#e52240", color: "#000", fontSize: 9, fontWeight: 900, letterSpacing: ".1em", padding: "4px 34px", transform: "rotate(40deg)" }}>SOLD OUT</div>
+                  )}
                   <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#8a8a8a", marginBottom: 8 }}>NEXT UP</div>
                   <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.3 }}>{nextEvent.name}</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#7a7a7a", marginTop: 6, lineHeight: 1.5 }}>{eventDateLabel(nextEvent)} · {eventTimeLabel(nextEvent)} · {eventLocation(nextEvent, locations).name} · {eventLocation(nextEvent, locations).address}</div>
@@ -1535,7 +1543,7 @@ function App() {
                       <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: "#f0dc9a" }}>WEATHER HOLD — EXPECT DELAY</span>
                     </div>
                   ) : (
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#e52240", marginTop: 12, letterSpacing: ".08em" }}>{myRsvp ? "YOU'RE RSVP'D" : "NOT RSVP'D YET"}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#e52240", marginTop: 12, letterSpacing: ".08em" }}>{myRsvp ? "YOU'RE RSVP'D" : (nextEvent.capacity != null && (rsvpMap[nextEvent.id]?.size || 0) >= nextEvent.capacity) ? "SOLD OUT" : "NOT RSVP'D YET"}</div>
                   )}
                 </div>
               )
@@ -1686,8 +1694,12 @@ function App() {
                 const on = rsvpMap[x.id]?.has(me.id);
                 const checkedIn = checkinMap[x.id]?.has(me.id);
                 const isPast = !x.cancelled && eventIsPast(x);
+                const soldOut = !on && x.capacity != null && (rsvpMap[x.id]?.size || 0) >= x.capacity;
                 return (
-                  <div key={x.id} className="card" style={{ opacity: (x.cancelled || isPast) ? 0.5 : 1 }}>
+                  <div key={x.id} className="card" style={{ opacity: (x.cancelled || isPast) ? 0.5 : 1, position: "relative", overflow: "hidden" }}>
+                    {soldOut && !isPast && !x.cancelled && (
+                      <div style={{ position: "absolute", top: 10, right: -30, background: "#e52240", color: "#000", fontSize: 9, fontWeight: 900, letterSpacing: ".1em", padding: "4px 34px", transform: "rotate(40deg)" }}>SOLD OUT</div>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontSize: 10, fontWeight: 800, color: "#e52240", letterSpacing: ".1em" }}>{eventDateLabel(x)} · {eventTimeLabel(x)}</div>
                       {checkedIn && <div style={{ fontSize: 10, fontWeight: 800, color: isPast ? "#e52240" : "#4ade80", letterSpacing: ".08em" }}>{isPast ? "✓ ATTENDED" : "✓ CHECKED IN"}</div>}
@@ -1699,8 +1711,8 @@ function App() {
                         <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: "#f0dc9a" }}>WEATHER HOLD — EXPECT DELAY</span>
                       </div>
                     )}
-                    <button className="btn-ghost" disabled={x.cancelled || isPast} onClick={() => toggleRsvp(x.id)} style={{ background: on && !isPast ? "#e52240" : "transparent", color: on && !isPast ? "#000" : "#e52240", borderColor: "#e52240" }}>
-                      {x.cancelled ? "CANCELLED" : isPast ? (x.special ? "EVENT ENDED" : "RUN ENDED") : (on ? "YOU'RE IN — TAP TO CANCEL" : "RSVP")}
+                    <button className="btn-ghost" disabled={x.cancelled || isPast || soldOut} onClick={() => toggleRsvp(x.id)} style={{ background: on && !isPast ? "#e52240" : "transparent", color: on && !isPast ? "#000" : "#e52240", borderColor: "#e52240" }}>
+                      {x.cancelled ? "CANCELLED" : isPast ? (x.special ? "EVENT ENDED" : "RUN ENDED") : soldOut ? "SOLD OUT" : (on ? "YOU'RE IN — TAP TO CANCEL" : "RSVP")}
                     </button>
                   </div>
                 );
@@ -1847,13 +1859,14 @@ function App() {
                 const isIn = inSet.has(r.id);
                 const hasRsvp = rsvpSet.has(r.id);
                 if (!hasRsvp) {
+                  const soldOut = ev && ev.capacity != null && (rsvpSet.size || 0) >= ev.capacity;
                   return (
-                    <button key={r.id} onClick={() => ev && captainRsvpFor(r.id, ev.id)} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 56, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #191919", color: "#fff", cursor: "pointer" }}>
+                    <button key={r.id} disabled={soldOut} onClick={() => ev && !soldOut && captainRsvpFor(r.id, ev.id)} style={{ display: "flex", justifyContent: "space-between", width: "100%", minHeight: 56, padding: "10px 0", background: "none", border: "none", borderBottom: "1px solid #191919", color: "#fff", cursor: soldOut ? "default" : "pointer", opacity: soldOut ? 0.5 : 1 }}>
                       <span style={{ textAlign: "left" }}>
                         <div style={{ fontSize: 15, fontWeight: 800 }}>{r.first_name} {r.last_name}</div>
                         <div style={{ fontSize: 11, color: "#7a7a7a" }}>{r.pace} · {r.runs} runs</div>
                       </span>
-                      <span style={{ fontSize: 11, fontWeight: 900, padding: "6px 10px", alignSelf: "center", background: "transparent", color: "#fff", border: "1px solid #fff" }}>RSVP</span>
+                      <span style={{ fontSize: 11, fontWeight: 900, padding: "6px 10px", alignSelf: "center", background: "transparent", color: "#fff", border: "1px solid #fff" }}>{soldOut ? "SOLD OUT" : "RSVP"}</span>
                     </button>
                   );
                 }
@@ -2031,6 +2044,10 @@ function App() {
                 <div>
                   <label className="label">END TIME (OPTIONAL — used to show "happening now")</label>
                   <input className="field" type="time" value={eventForm.event_end_time} onChange={e => setEventField({ event_end_time: e.target.value })} style={{ colorScheme: "dark" }} />
+                </div>
+                <div>
+                  <label className="label">CAPACITY <span style={{ color: "#5a5a5a" }}>(optional — shows sold out once RSVPs hit this)</span></label>
+                  <input className="field" type="number" inputMode="numeric" min="1" placeholder="e.g. 30" value={eventForm.capacity} onChange={e => setEventField({ capacity: e.target.value })} />
                 </div>
                 <div>
                   <label className="label">LOCATION</label>
