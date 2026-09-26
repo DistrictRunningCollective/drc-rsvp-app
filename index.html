@@ -1958,8 +1958,7 @@ function App() {
                   {eventGroups.thisWeekPast.map(x => (
                     <div key={x.id} style={{ border: "1px solid #232323", padding: "12px 14px", opacity: 0.5 }}>
                       <div style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", color: "#fff", marginBottom: 3 }}>{x.name}</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#8a8a8a", marginBottom: 10 }}>{eventDateLabel(x)} · {eventTimeLabel(x)} · {eventLocation(x, locations).name}</div>
-                      <button onClick={() => loadEventForm(x)} style={{ minHeight: 34, padding: "0 14px", cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a" }}>EDIT</button>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#8a8a8a" }}>{eventDateLabel(x)} · {eventTimeLabel(x)} · {eventLocation(x, locations).name}</div>
                     </div>
                   ))}
 
@@ -1974,8 +1973,7 @@ function App() {
                           {bucket.events.map(x => (
                             <div key={x.id} style={{ opacity: 0.5, borderTop: "1px solid #191919", paddingTop: 10 }}>
                               <div style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", color: "#fff", marginBottom: 3 }}>{x.name}</div>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: "#8a8a8a", marginBottom: 10 }}>{eventDateLabel(x)} · {eventTimeLabel(x)} · {eventLocation(x, locations).name}</div>
-                              <button onClick={() => loadEventForm(x)} style={{ minHeight: 34, padding: "0 14px", cursor: "pointer", borderRadius: 2, fontSize: 10, fontWeight: 900, letterSpacing: ".12em", background: "transparent", color: "#8a8a8a", border: "1px solid #2a2a2a" }}>EDIT</button>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: "#8a8a8a" }}>{eventDateLabel(x)} · {eventTimeLabel(x)} · {eventLocation(x, locations).name}</div>
                             </div>
                           ))}
                         </div>
