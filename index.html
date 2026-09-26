@@ -744,13 +744,27 @@ function App() {
     const now = new Date();
     return events.find(x => {
       if (x.cancelled || !x.event_date) return false;
-      if (!rsvpMap[x.id]?.has(me.id)) return false;
       const start = new Date(x.event_date + "T" + (x.event_time ? x.event_time.slice(0, 5) : "00:00") + ":00");
-      const endTime = x.event_end_time ? x.event_end_time.slice(0, 5) : "23:59";
-      const end = new Date(x.event_date + "T" + endTime + ":00");
+      let end;
+      if (x.special) {
+        // Special / non-running events: use the explicit end time if
+        // set, otherwise fall back to end-of-day.
+        const endTime = x.event_end_time ? x.event_end_time.slice(0, 5) : "23:59";
+        end = new Date(x.event_date + "T" + endTime + ":00");
+      } else {
+        // Regular runs: default to 45 minutes after the start, unless
+        // a captain marked check-in complete earlier than that — late
+        // arrivals can still be checked in either way, this only
+        // controls the "Happening Now" window itself.
+        end = new Date(start.getTime() + 45 * 60 * 1000);
+        if (x.checkin_completed_at) {
+          const completedAt = new Date(x.checkin_completed_at);
+          if (completedAt < end) end = completedAt;
+        }
+      }
       return start <= now && now <= end;
     }) || null;
-  }, [events, rsvpMap, me]);
+  }, [events, me]);
 
   // Default to whichever event is currently happening or coming up next
   // (first non-past entry in chronological order), falling back to the
@@ -963,6 +977,11 @@ function App() {
   async function captainRsvpFor(runnerId, eventId) {
     setRsvpMap(m => { const s = new Set(m[eventId] || []); s.add(runnerId); return { ...m, [eventId]: s }; });
     await sb.rpc("captain_rsvp_for", { p_runner_id: runnerId, p_event_id: eventId });
+  }
+
+  async function markCheckinComplete(eventId) {
+    setEvents(evs => evs.map(x => x.id === eventId ? { ...x, checkin_completed_at: new Date().toISOString() } : x));
+    await sb.rpc("captain_mark_checkin_complete", { p_event_id: eventId });
   }
 
   async function checkIn(runnerId, eventId) {
@@ -1849,6 +1868,9 @@ function App() {
                 );
               })}
             </div>
+            {ev && !ev.special && (
+              <button onClick={() => markCheckinComplete(ev.id)} style={{ width: "100%", marginTop: 18, minHeight: 52, cursor: "pointer", borderRadius: 4, background: "#e52240", color: "#000", border: "none", fontSize: 14, fontWeight: 900, fontStyle: "italic", textTransform: "uppercase", letterSpacing: ".03em" }}>Check-in complete</button>
+            )}
           </div>
         )}
 
