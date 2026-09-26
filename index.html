@@ -49,6 +49,10 @@ const SUPABASE_KEY = "sb_publishable_aNo3_b6twiEH9sKoshNXqw_Gq-HasNz";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const PACES = ["Flyers", "Movers", "Groovers I", "Groovers II", "Cruisers"];
+// Update this each year the District 19 race comes back around, since
+// RunSignUp can reuse the same race ID year over year — this is what
+// keeps other years' registrations from showing up in the app.
+const RACE_YEAR_FILTER = 2026;
 const DISTANCES = ["Long Distance", "Mid Distance", "Short Distance"];
 const MILESTONES = [10, 25, 50, 100];
 const GUIDELINES = [
@@ -894,7 +898,7 @@ function App() {
     setMe(runner);
     setRole(runner.app_role || "runner");
     setView("member");
-    sb.from("race_registrations").select("*").then(({ data }) => setMyRaceRegs(data || []));
+    sb.from("race_registrations").select("*").gte("event_date", RACE_YEAR_FILTER + "-01-01").lt("event_date", (RACE_YEAR_FILTER + 1) + "-01-01").then(({ data }) => setMyRaceRegs(data || []));
     if ((runner.app_role || "runner") === "admin" && captainTab === "settings") {
       sb.rpc("admin_get_club_settings").then(({ data }) => {
         const row = data?.[0];
