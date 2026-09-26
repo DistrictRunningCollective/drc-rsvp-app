@@ -1990,7 +1990,7 @@ function App() {
 
             <div>
               <button onClick={() => setNewEventExpanded(e => !e)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: newEventExpanded ? 14 : 0 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#fff" }}>{editingEventId ? "EDITING · " + eventForm.name : "NEW EVENT"}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".2em", color: "#fff" }}>{editingEventId ? "EDITING · " + eventForm.name : "+ NEW EVENT"}</span>
                 <span style={{ color: "#6a6a6a", fontSize: 12 }}>{newEventExpanded ? "▴" : "▾"}</span>
               </button>
               {newEventExpanded && (
@@ -2233,6 +2233,7 @@ function App() {
           </div>
         )}
 
+        <div style={{ height: 1, background: "#1e1e1e", margin: "20px 0 4px" }} />
         <button onClick={signOut} style={{ background: "none", border: "none", color: "#6a6a6a", fontSize: 11, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase", cursor: "pointer", padding: "24px 0 0", display: "block" }}>Sign out</button>
       </div>
       {renderBottomNav()}
